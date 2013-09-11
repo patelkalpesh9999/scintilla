@@ -252,10 +252,10 @@ def main(argv):
             namesGtk = set(gtkNames())
             for name in namesGtk:
                 if name not in names:
-                    print(name, "not found in Qt version")
+                    print((name, "not found in Qt version"))
             for name in names:
                 if name not in namesGtk:
-                    print(name, "not found in GTK+ version")
+                    print((name, "not found in GTK+ version"))
     except:
         raise
 

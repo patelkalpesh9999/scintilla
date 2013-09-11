@@ -11,7 +11,7 @@
 # instantiated, it is compared with the target file and if different the file
 # is rewritten.
 
-from __future__ import with_statement
+
 
 import codecs
 import os
@@ -37,7 +37,7 @@ def UpdateFile(filename, updated):
         newOrChanged = "New"
     with codecs.open(filename, "w", "utf-8") as outfile:
         outfile.write(updated)
-    print("%s %s" % (newOrChanged, filename))
+    print(("%s %s" % (newOrChanged, filename)))
 
 # Automatically generated sections contain start and end comments,
 # a definition line and the results.
@@ -136,7 +136,7 @@ def GenerateFile(inpath, outpath, commentPrefix, retainDefs, *lists):
                                     retainDefs, lists)
         UpdateFile(outpath, updated)
     except IOError:
-        print("Can not open %s" % inpath)
+        print(("Can not open %s" % inpath))
 
 
 def Generate(inpath, outpath, commentPrefix, *lists):

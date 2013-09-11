@@ -47,6 +47,6 @@ try:
     f.ReadFromFile("../include/Scintilla.iface")
     Regenerate("../include/Scintilla.h", "/* ", printHFile(f))
     Regenerate("../include/SciLexer.h", "/* ", printLexHFile(f))
-    print("Maximum ID is %s" % max([x for x in f.values if int(x) < 3000]))
+    print(("Maximum ID is %s" % max([x for x in f.values if int(x) < 3000])))
 except:
     raise

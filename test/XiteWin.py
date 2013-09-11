@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
-from __future__ import with_statement
-from __future__ import unicode_literals
+
+
 
 import os
 import sys
@@ -174,7 +174,7 @@ class XiteWin():
             self.ed.GotoPos(self.ed.Length)
 
         if self.test:
-            print(self.test)
+            print((self.test))
             for k in self.cmds:
                 if self.cmds[k] == "Test":
                     user32.PostMessageW(self.win, msgs["WM_COMMAND"], k, 0)
@@ -212,7 +212,7 @@ class XiteWin():
         user32.DefWindowProcW.argtypes = [HWND, c_uint, WPARAM, LPARAM]
         ms = sgsm.get(m, "XXX")
         if trace:
-            print("%s %s %s %s" % (hex(h)[2:], ms, w, l))
+            print(("%s %s %s %s" % (hex(h)[2:], ms, w, l)))
         if ms == "WM_CLOSE":
             user32.PostQuitMessage(0)
         elif ms == "WM_CREATE":
@@ -255,7 +255,7 @@ class XiteWin():
             keyName += "<shift>"
         keyName += KeyTranslate(w)
         if trace:
-            print("Key:", keyName)
+            print(("Key:", keyName))
         if keyName in self.keys:
             method = "Cmd" + self.keys[keyName]
             getattr(self, method)()
@@ -276,7 +276,7 @@ class XiteWin():
         lpmsg = ctypes.byref(msg)
         while user32.GetMessageW(lpmsg, 0, 0, 0):
             if trace and msg.message != msgs["WM_TIMER"]:
-                print('mm', hex(msg.hWnd)[2:], sgsm.get(msg.message, "XXX"))
+                print(('mm', hex(msg.hWnd)[2:], sgsm.get(msg.message, "XXX")))
             if not self.Accelerator(msg):
                 user32.TranslateMessage(lpmsg)
                 user32.DispatchMessageW(lpmsg)
@@ -382,7 +382,7 @@ class XiteWin():
     def CheckMenuItem(self, name, val):
         #~ print(name, val)
         if self.cmds:
-            for k, v in self.cmds.items():
+            for k, v in list(self.cmds.items()):
                 if v == name:
                     #~ print(name, k)
                     user32.CheckMenuItem(user32.GetMenu(self.win),
@@ -489,13 +489,13 @@ class XiteWin():
     def CmdExercised(self):
         print()
         unused = sorted(self.ed.all.difference(self.ed.used))
-        print("Unused", len(unused))
+        print(("Unused", len(unused)))
         print()
-        print("\n".join(unused))
+        print(("\n".join(unused)))
         print()
-        print("Used", len(self.ed.used))
+        print(("Used", len(self.ed.used)))
         print()
-        print("\n".join(sorted(self.ed.used)))
+        print(("\n".join(sorted(self.ed.used))))
 
     def Uncalled(self):
         print("")

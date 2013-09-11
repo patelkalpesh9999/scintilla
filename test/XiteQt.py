@@ -47,7 +47,7 @@ class XiteWin():
         self.form.show()
 
     def DoStuff(self):
-        print(self.test)
+        print((self.test))
         self.CmdTest()
 
     def DoEvents(self):

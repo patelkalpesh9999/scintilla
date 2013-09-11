@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
-from __future__ import with_statement
-from __future__ import unicode_literals
+
+
 
 import codecs
 import ctypes
@@ -1746,10 +1746,10 @@ class TestWordChars(unittest.TestCase):
         """
         if sys.version_info.major == 2:
             # Python 2, use latin-1 encoded str
-            unichars = (unichr(x) for x in chars if x != 0)
+            unichars = (chr(x) for x in chars if x != 0)
             # can't use literal u"", that's a syntax error in Py3k
             # uncode() doesn't exist in Py3k, but we never run it there
-            result = unicode("").join(unichars).encode("latin-1")
+            result = str("").join(unichars).encode("latin-1")
         else:
             # Python 3, use bytes()
             result = bytes(x for x in chars if x != 0)
@@ -1780,7 +1780,7 @@ class TestWordChars(unittest.TestCase):
         # check that the default whitespace chars are as expected
         import string
         data = self.ed.GetWhitespaceChars(None)
-        expected = (set(chr(x) for x in (range(0, 0x20))) | set(' ')) - \
+        expected = (set(chr(x) for x in (list(range(0, 0x20)))) | set(' ')) - \
             set(['\r', '\n'])
         self.assertCharSetsEqual(data, expected)
 
@@ -1794,7 +1794,7 @@ class TestWordChars(unittest.TestCase):
 
     def testCustomWordChars(self):
         # check that setting things to whitespace chars makes them not words
-        self._setChars("whitespace", range(1, 0x100))
+        self._setChars("whitespace", list(range(1, 0x100)))
         data = self.ed.GetWordChars(None)
         expected = set()
         self.assertCharSetsEqual(data, expected)
@@ -1806,7 +1806,7 @@ class TestWordChars(unittest.TestCase):
 
     def testCustomWhitespaceChars(self):
         # check setting whitespace chars to non-default values
-        self._setChars("word", range(1, 0x100))
+        self._setChars("word", list(range(1, 0x100)))
         # we can't change chr(0) from being anything but whitespace
         expected = set([0])
         data = self.ed.GetWhitespaceChars(None)
@@ -1819,7 +1819,7 @@ class TestWordChars(unittest.TestCase):
 
     def testCustomPunctuationChars(self):
         # check setting punctuation chars to non-default values
-        self._setChars("word", range(1, 0x100))
+        self._setChars("word", list(range(1, 0x100)))
         expected = set()
         data = self.ed.GetPunctuationChars(0)
         self.assertEquals(set(data), expected)

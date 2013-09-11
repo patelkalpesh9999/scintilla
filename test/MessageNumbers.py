@@ -58,5 +58,5 @@ msgs = {
 }
 
 sgsm = {}
-for k, v in msgs.items():
+for k, v in list(msgs.items()):
     sgsm[v] = k

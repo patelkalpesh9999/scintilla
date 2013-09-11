@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
-from __future__ import with_statement
-from __future__ import unicode_literals
+
+
 
 import os
 import string
@@ -31,7 +31,7 @@ class TestPerformance(unittest.TestCase):
             self.assertEquals(self.ed.LineCount, i + 2)
         end = time.time()
         duration = end - start
-        print("%6.3f testAddLine" % duration)
+        print(("%6.3f testAddLine" % duration))
         self.xite.DoEvents()
         self.assert_(self.ed.Length > 0)
 
@@ -43,7 +43,7 @@ class TestPerformance(unittest.TestCase):
             self.assertEquals(self.ed.LineCount, i + 2)
         end = time.time()
         duration = end - start
-        print("%6.3f testAddLineMiddle" % duration)
+        print(("%6.3f testAddLineMiddle" % duration))
         self.xite.DoEvents()
         self.assert_(self.ed.Length > 0)
 
@@ -54,7 +54,7 @@ class TestPerformance(unittest.TestCase):
         self.ed.AddText(len(data), data)
         end = time.time()
         duration = end - start
-        print("%6.3f testHuge" % duration)
+        print(("%6.3f testHuge" % duration))
         self.xite.DoEvents()
         self.assert_(self.ed.Length > 0)
 
@@ -68,7 +68,7 @@ class TestPerformance(unittest.TestCase):
             self.ed.InsertText(0, insert)
         end = time.time()
         duration = end - start
-        print("%6.3f testHugeInserts" % duration)
+        print(("%6.3f testHugeInserts" % duration))
         self.xite.DoEvents()
         self.assert_(self.ed.Length > 0)
 
@@ -84,7 +84,7 @@ class TestPerformance(unittest.TestCase):
             self.ed.ReplaceTarget(len(insert), insert)
         end = time.time()
         duration = end - start
-        print("%6.3f testHugeReplace" % duration)
+        print(("%6.3f testHugeReplace" % duration))
         self.xite.DoEvents()
         self.assert_(self.ed.Length > 0)
 
@@ -104,7 +104,7 @@ class TestPerformance(unittest.TestCase):
             self.assert_(pos > 0)
         end = time.time()
         duration = end - start
-        print("%6.3f testUTF8CaseSearches" % duration)
+        print(("%6.3f testUTF8CaseSearches" % duration))
         self.xite.DoEvents()
 
     def testUTF8Searches(self):
@@ -123,7 +123,7 @@ class TestPerformance(unittest.TestCase):
             self.assert_(pos > 0)
         end = time.time()
         duration = end - start
-        print("%6.3f testUTF8Searches" % duration)
+        print(("%6.3f testUTF8Searches" % duration))
         self.xite.DoEvents()
 
 if __name__ == '__main__':

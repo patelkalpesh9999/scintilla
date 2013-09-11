@@ -28,7 +28,7 @@
 # This file can be run to see the data it provides.
 # Requires Python 2.5 or later
 
-from __future__ import with_statement
+
 
 import datetime
 import glob
@@ -176,10 +176,10 @@ class ScintillaData:
         self.propertyDocuments = {}
         for lexFile in lexFilePaths:
             self.lexerModules.extend(FindModules(lexFile))
-            for k in FindProperties(lexFile).keys():
+            for k in list(FindProperties(lexFile).keys()):
                 lexerProperties.add(k)
             documents = FindPropertyDocumentation(lexFile)
-            for k in documents.keys():
+            for k in list(documents.keys()):
                 if k not in self.propertyDocuments:
                     self.propertyDocuments[k] = documents[k]
         SortListInsensitive(self.lexerModules)
@@ -188,14 +188,14 @@ class ScintillaData:
 
 
 def printWrapped(text):
-    print(textwrap.fill(text, subsequent_indent="    "))
+    print((textwrap.fill(text, subsequent_indent="    ")))
 
 if __name__ == "__main__":
     sci = ScintillaData("../")
-    print("Version   %s   %s   %s" %
-          (sci.version, sci.versionDotted, sci.versionCommad))
-    print("Date last modified    %s   %s   %s   %s   %s" % (
-        sci.dateModified, sci.yearModified, sci.mdyModified, sci.dmyModified, sci.myModified))
+    print(("Version   %s   %s   %s" %
+          (sci.version, sci.versionDotted, sci.versionCommad)))
+    print(("Date last modified    %s   %s   %s   %s   %s" % (
+        sci.dateModified, sci.yearModified, sci.mdyModified, sci.dmyModified, sci.myModified)))
     printWrapped(str(len(
         sci.lexFiles)) + " lexer files: " + ", ".join(sci.lexFiles))
     printWrapped(str(len(sci.lexerModules)) +
@@ -205,7 +205,7 @@ if __name__ == "__main__":
     documentProperties = list(sci.propertyDocuments.keys())
     SortListInsensitive(documentProperties)
     for k in documentProperties:
-        print("    " + k)
-        print(
+        print(("    " + k))
+        print((
             textwrap.fill(sci.propertyDocuments[k], initial_indent="        ",
-                          subsequent_indent="        "))
+                          subsequent_indent="        ")))

@@ -106,8 +106,8 @@ def groupRanges(symmetrics):
 
     rangeGroups = sorted(longGroups+longOneGroups, key=lambda s: s[0])
 
-    rangeCoverage = list(flatten([range(r[0], r[
-                         0]+r[2]*r[3], r[3]) for r in rangeGroups]))
+    rangeCoverage = list(flatten([list(range(r[0], r[
+                         0]+r[2]*r[3], r[3])) for r in rangeGroups]))
 
     nonRanges = [(l, u) for l, u, d in symmetrics if l not in rangeCoverage]
 
@@ -119,16 +119,16 @@ def updateCaseConvert():
 
     rangeGroups, nonRanges = groupRanges(symmetrics)
 
-    print(len(rangeGroups), "ranges")
+    print((len(rangeGroups), "ranges"))
     rangeLines = ["%d,%d,%d,%d, " % x for x in rangeGroups]
 
-    print(len(nonRanges), "non ranges")
+    print((len(nonRanges), "non ranges"))
     nonRangeLines = ["%d,%d, " % x for x in nonRanges]
 
-    print(len(symmetrics), "symmetric")
+    print((len(symmetrics), "symmetric"))
 
     complexLines = ['"%s|%s|%s|%s|"' % x for x in complexes]
-    print(len(complexLines), "complex")
+    print((len(complexLines), "complex"))
 
     Regenerate("../src/CaseConvert.cxx", "//",
                rangeLines, nonRangeLines, complexLines)

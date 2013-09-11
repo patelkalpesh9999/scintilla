@@ -69,7 +69,7 @@ class Face:
                             retType, name, value, param1, param2 = decodeFunction(
                                 featureVal)
                         except ValueError:
-                            print("Failed to decode %s" % line)
+                            print(("Failed to decode %s" % line))
                             raise
                         p1 = decodeParam(param1)
                         p2 = decodeParam(param2)
@@ -105,7 +105,7 @@ class Face:
                         try:
                             name, value = featureVal.split("=", 1)
                         except ValueError:
-                            print("Failure %s" % featureVal)
+                            print(("Failure %s" % featureVal))
                             raise Exception()
                         self.features[name] = {
                             "FeatureType": featureType,

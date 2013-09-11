@@ -45,11 +45,11 @@ def textFromRun(args):
 
 
 def runProgram(args, exitOnFailure):
-    print(" ".join(args))
+    print((" ".join(args)))
     retcode = subprocess.call(" ".join(
         args), shell=True, stderr=subprocess.STDOUT)
     if retcode:
-        print("Failed in " + " ".join(args) + " return code = " + str(retcode))
+        print(("Failed in " + " ".join(args) + " return code = " + str(retcode)))
         if exitOnFailure:
             sys.exit()
 
@@ -248,11 +248,11 @@ class SepBuilder:
             "--typesystem-paths=" + self.PySideTypeSystem,
             "--output-directory=.",
             "typesystem_ScintillaEdit.xml"]
-        print(" ".join(args))
+        print((" ".join(args)))
         retcode = subprocess.call(" ".join(
             args), shell=True, stderr=subprocess.STDOUT)
         if retcode:
-            print("Failed in generatorrunner", retcode)
+            print(("Failed in generatorrunner", retcode))
             sys.exit()
 
     def writeVariables(self):

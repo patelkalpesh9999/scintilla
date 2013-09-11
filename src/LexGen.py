@@ -117,7 +117,7 @@ def UpdateFile(filename, updated):
         out = open(filename, "wb")
         out.write(updated.encode('utf-8'))
         out.close()
-        print("New %s" % filename)
+        print(("New %s" % filename))
         return
     original = infile.read()
     infile.close()
@@ -127,9 +127,9 @@ def UpdateFile(filename, updated):
         out = open(filename, "wb")
         out.write(updated.encode('utf-8'))
         out.close()
-        print("Changed %s " % filename)
+        print(("Changed %s " % filename))
     else:
-        print("Unchanged", filename)
+        print(("Unchanged", filename))
 
 
 def Generate(inpath, outpath, commentPrefix, eolType, *lists):
@@ -144,7 +144,7 @@ def Generate(inpath, outpath, commentPrefix, eolType, *lists):
     try:
         infile = open(inpath, "rb")
     except IOError:
-        print("Can not open %s" % inpath)
+        print(("Can not open %s" % inpath))
         return
     original = infile.read()
     infile.close()
@@ -327,10 +327,10 @@ def RegenerateAll():
     propertyDocuments = {}
     for lexFile in lexFilePaths:
         lexerModules.extend(FindModules(lexFile))
-        for k in FindProperties(lexFile).keys():
+        for k in list(FindProperties(lexFile).keys()):
             lexerProperties[k] = 1
         documents = FindPropertyDocumentation(lexFile)
-        for k in documents.keys():
+        for k in list(documents.keys()):
             propertyDocuments[k] = documents[k]
     sortListInsensitive(lexerModules)
     lexerProperties = list(lexerProperties.keys())
