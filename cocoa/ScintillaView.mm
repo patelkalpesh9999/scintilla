@@ -82,6 +82,10 @@ static NSCursor *cursorFromEnum(Window::Cursor cursor)
   [[self window] invalidateCursorRectsForView: self];
 }
 
+// Komodo - override lock focus methods to avoid drawing glitches - bug 99863.
+- (void)lockFocus {}
+- (void)unlockFocus {}
+
 - (CGFloat)requiredThickness
 {
   return marginWidth;
@@ -202,6 +206,7 @@ static NSCursor *cursorFromEnum(Window::Cursor cursor)
   [mCurrentCursor retain];
   
   // Trigger recreation of the cursor rectangle(s).
+  [mCurrentCursor set];  // Forced cursor setting - Komodo bug 97903.
   [[self window] invalidateCursorRectsForView: self];
 }
 
@@ -264,6 +269,7 @@ static NSCursor *cursorFromEnum(Window::Cursor cursor)
 - (BOOL) acceptsFirstMouse: (NSEvent *) theEvent
 {
 #pragma unused(theEvent)
+  return NO; // No, we want the child view to do this...
   return YES;
 }
 
@@ -274,7 +280,10 @@ static NSCursor *cursorFromEnum(Window::Cursor cursor)
  */
 - (BOOL) acceptsFirstResponder
 {
-  return YES;
+#if defined(SCINTILLA_COCOA_DEBUG)
+  fprintf(stderr, ">> ScintillaView.mm:: InnerView:: acceptsFirstResponder\n");
+#endif
+  return NO; // No, we want the child view to do this...
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -284,6 +293,9 @@ static NSCursor *cursorFromEnum(Window::Cursor cursor)
  */
 - (NSMenu*) menuForEvent: (NSEvent*) theEvent
 {
+#if defined(SCINTILLA_COCOA_DEBUG)
+  fprintf(stderr, "**** We don't want to see this: ScintillaView.mm:: InnerView:: menuForEvent\n");
+#endif
   if (![mOwner respondsToSelector: @selector(menuForEvent:)])
     return mOwner.backend->CreateContextMenu(theEvent);
   else
@@ -557,6 +569,9 @@ static NSCursor *cursorFromEnum(Window::Cursor cursor)
  */
 - (void) keyDown: (NSEvent *) theEvent
 {
+#if defined(SCINTILLA_COCOA_DEBUG)
+  fprintf(stderr, "**************** >> ScintillaView.mm::InnerView::keyDown\n");
+#endif
   if (mMarkedTextRange.length == 0)
 	mOwner.backend->KeyboardInput(theEvent);
   NSArray* events = [NSArray arrayWithObject: theEvent];
@@ -568,6 +583,7 @@ static NSCursor *cursorFromEnum(Window::Cursor cursor)
 - (void) mouseDown: (NSEvent *) theEvent  
 {
   mOwner.backend->MouseDown(theEvent);
+  [super mouseDown:theEvent];  // Send through the DOM as well.
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -575,6 +591,7 @@ static NSCursor *cursorFromEnum(Window::Cursor cursor)
 - (void) mouseDragged: (NSEvent *) theEvent
 {
   mOwner.backend->MouseMove(theEvent);
+  [super mouseDragged:theEvent];  // Send through the DOM as well.
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -582,6 +599,7 @@ static NSCursor *cursorFromEnum(Window::Cursor cursor)
 - (void) mouseUp: (NSEvent *) theEvent
 {
   mOwner.backend->MouseUp(theEvent);
+  [super mouseUp:theEvent];  // Send through the DOM as well.
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -589,6 +607,7 @@ static NSCursor *cursorFromEnum(Window::Cursor cursor)
 - (void) mouseMoved: (NSEvent *) theEvent
 {
   mOwner.backend->MouseMove(theEvent);
+  [super mouseMoved:theEvent];  // Send through the DOM as well.
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -596,6 +615,7 @@ static NSCursor *cursorFromEnum(Window::Cursor cursor)
 - (void) mouseEntered: (NSEvent *) theEvent
 {
   mOwner.backend->MouseEntered(theEvent);
+  [super mouseEntered:theEvent];  // Send through the DOM as well.
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -603,6 +623,7 @@ static NSCursor *cursorFromEnum(Window::Cursor cursor)
 - (void) mouseExited: (NSEvent *) theEvent
 {
   mOwner.backend->MouseExited(theEvent);
+  [super mouseExited:theEvent];  // Send through the DOM as well.
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -612,11 +633,10 @@ static NSCursor *cursorFromEnum(Window::Cursor cursor)
  */
 - (void) scrollWheel: (NSEvent *) theEvent
 {
-  if (([theEvent modifierFlags] & NSCommandKeyMask) != 0) {
-    mOwner.backend->MouseWheel(theEvent);
-  } else {
-    [super scrollWheel:theEvent];
-  }
+  // Send the event through mOwner, to avoid the NSScrollView handling it.
+  // We want it to go to the DOM instead. (Komodo bug 99862)
+  mOwner.backend->MouseWheel(theEvent);
+  [mOwner scrollWheel:theEvent];
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -997,6 +1017,11 @@ static void notification(intptr_t windowid, unsigned int iMessage, uintptr_t wPa
           // There can be more than one modification carried by one notification.
           if (scn->modificationType & (SC_MOD_INSERTTEXT | SC_MOD_DELETETEXT))
             [editor sendNotification: NSTextDidChangeNotification];
+          else if (scn->modificationType & SC_MOD_CHANGESTYLE) {
+            // Komodo: set the background color on the scroll view, bug 100251.
+            NSColor *color = [editor getColorProperty: SCI_STYLEGETBACK parameter: STYLE_DEFAULT];
+            [editor->scrollView setBackgroundColor: color];
+          }
           break;
         }
         case SCN_ZOOM:
@@ -1073,6 +1098,8 @@ static void notification(intptr_t windowid, unsigned int iMessage, uintptr_t wPa
     [scrollView setHasHorizontalRuler:NO];
     [scrollView setHasVerticalRuler:YES];
     [scrollView setRulersVisible:YES];
+
+    mScrollerForceHide = NO;
     
     mBackend = new ScintillaCocoa(mContent, marginView);
 
@@ -1109,9 +1136,19 @@ static void notification(intptr_t windowid, unsigned int iMessage, uintptr_t wPa
 
 //--------------------------------------------------------------------------------------------------
 
+- (void)setWantsLayer:(BOOL)flag
+{
+ // Set child views to be layer *backed* views.
+  if (scrollView)
+    [scrollView setWantsLayer: flag];
+}
+
+//--------------------------------------------------------------------------------------------------
+
 - (void) dealloc
 {
   [[NSNotificationCenter defaultCenter] removeObserver:self];
+  mBackend->unregisterNotifyCallback(nil, notification);
   delete mBackend;
   [super dealloc];
 }
@@ -1157,8 +1194,7 @@ static void notification(intptr_t windowid, unsigned int iMessage, uintptr_t wPa
 
   // Horizontal offset of the content. Almost always 0 unless the vertical scroller
   // is on the left side.
-  int contentX = 0;
-  NSRect scrollRect = {contentX, 0, size.width, size.height};
+  NSRect scrollRect = {0, 0, size.width, size.height};
 
   // Info bar frame.
   if (infoBarVisible)
@@ -1178,6 +1214,12 @@ static void notification(intptr_t windowid, unsigned int iMessage, uintptr_t wPa
 
   if (infoBarVisible)
     [mInfoBar setFrame: barFrame];
+}
+
+//--------------------------------------------------------------------------------------------------
+- (void) setScrollForceHide: (BOOL) hide
+{
+  mScrollerForceHide = hide;
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -1844,6 +1886,34 @@ static void notification(intptr_t windowid, unsigned int iMessage, uintptr_t wPa
 }
 
 //--------------------------------------------------------------------------------------------------
+
+// Try specifying these events for the scintillaView, not just
+// the InnerView
+
+/**
+ * Implement the "click through" behavior by telling the caller we accept the first mouse event too.
+ */
+- (BOOL) acceptsFirstMouse: (NSEvent *) theEvent
+{
+#pragma unused(theEvent)
+#if defined(SCINTILLA_COCOA_DEBUG)
+  fprintf(stderr, ">> ScintillaView.mm:: ScintillaView:: acceptsFirstMouse\n");
+#endif
+  return NO; // No, we want the child view to do this...
+}
+
+//--------------------------------------------------------------------------------------------------
+
+/**
+ * Make this view accepting events as first responder.
+ */
+- (BOOL) acceptsFirstResponder
+{
+#if defined(SCINTILLA_COCOA_DEBUG)
+  fprintf(stderr, ">> ScintillaView.mm:: ScintillaView:: acceptsFirstResponder\n");
+#endif
+  return NO; // No, we want the child view to do this...
+}
 
 @end
 

@@ -211,6 +211,7 @@ protected:	// ScintillaBase subclass needs access to much of Editor
 	bool trackLineWidth;
 	int lineWidthMaxSeen;
 	bool verticalScrollBarVisible;
+	bool useCustomScrollBars;
 	bool endAtLastLine;
 	int caretSticky;
 	int marginOptions;
@@ -323,6 +324,13 @@ protected:	// ScintillaBase subclass needs access to much of Editor
 	int lastSegItalicsOffset; // the offset so as not to clip italic characters at EOLs
 
 	Document *pdoc;
+    
+	// ActiveState prevent minimap selection-claiming (bug 97956)
+	bool rejectSelectionClaim;
+	// ActiveState: suppress drag/drop when in minimap (bug 97159)
+	bool suppressDragDrop;
+	// ActiveState: hook {ctrl,cmd}-scroll-wheel zooming (bug 98938)
+	bool suppressZoomOnScrollWheel; // default false
 
 	Editor();
 	virtual ~Editor();
@@ -383,6 +391,10 @@ protected:	// ScintillaBase subclass needs access to much of Editor
 	void SetEmptySelection(int currentPos_);
 	bool RangeContainsProtected(int start, int end) const;
 	bool SelectionContainsProtected();
+	
+	// ACTIVESTATE
+	int GetBytePositionForCharOffset(int bytePos, int charOffset, bool checkLineEnd=true);
+
 	int MovePositionOutsideChar(int pos, int moveDir, bool checkLineEnd=true) const;
 	SelectionPosition MovePositionOutsideChar(SelectionPosition pos, int moveDir, bool checkLineEnd=true) const;
 	int MovePositionTo(SelectionPosition newPos, Selection::selTypes sel=Selection::noSel, bool ensureVisible=true);

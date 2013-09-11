@@ -386,8 +386,6 @@ ScintillaCocoa::ScintillaCocoa(InnerView* view, MarginView* viewMargin)
   wMargin = viewMargin;
   timerTarget = [[TimerTarget alloc] init: this];
   lastMouseEvent = NULL;
-  notifyObj = NULL;
-  notifyProc = NULL;
   capturedMouse = false;
   enteredSetScrollingSize = false;
   scrollSpeed = 1;
@@ -780,7 +778,11 @@ sptr_t ScintillaCocoa::WndProc(unsigned int iMessage, uptr_t wParam, sptr_t lPar
       return reinterpret_cast<sptr_t>(this);
       
     case SCI_GRABFOCUS:
-      [[ContentView() window] makeFirstResponder:ContentView()];
+      // Commenting this out makes no difference -- this code wasn't called.
+#if defined(SCINTILLA_COCOA_DEBUG)
+      fprintf(stderr, "ScintillaCocoa.mm:: WndProc: don't makeFirstResponder on SCI_GRABFOCUS\n");
+#endif
+      // [[ContentView() window] makeFirstResponder:ContentView()];
       break;
       
     case SCI_SETBUFFEREDDRAW:
@@ -1151,6 +1153,10 @@ void ScintillaCocoa::DragScroll()
  */
 void ScintillaCocoa::StartDrag()
 {
+#ifdef KOMODO_DISABLE_DRAG_DROP
+    inDragDrop = ddNone;
+    return;
+#endif
   if (sel.Empty())
     return;
 
@@ -1386,6 +1392,11 @@ bool ScintillaCocoa::PerformDragOperation(id <NSDraggingInfo> info)
     NSArray* files = [pasteboard propertyListForType: NSFilenamesPboardType];
     for (NSString* uri in files)
       NotifyURIDropped([uri UTF8String]);
+  }
+  else if ([[pasteboard types] containsObject: NSURLPboardType])
+  {
+    NSString* uri = [[NSURL URLFromPasteboard:pasteboard] absoluteString];
+    NotifyURIDropped([uri UTF8String]);
   }
   else
   {
@@ -1639,15 +1650,15 @@ bool ScintillaCocoa::SetScrollingSize(void) {
 			(wrapState == eWrapNone);
 		if (!showHorizontalScroll)
 			docWidth = clipRect.size.width;
-		NSRect contentRect = {0, 0, docWidth, docHeight};
+		NSRect contentRect = {0, 0, static_cast<CGFloat>(docWidth), static_cast<CGFloat>(docHeight)};
 		NSRect contentRectNow = [inner frame];
 		changes = (contentRect.size.width != contentRectNow.size.width) ||
 			(contentRect.size.height != contentRectNow.size.height);
 		if (changes) {
 			[inner setFrame: contentRect];
 		}
-		[scrollView setHasVerticalScroller: verticalScrollBarVisible];
-		[scrollView setHasHorizontalScroller: showHorizontalScroll];
+		[scrollView setHasVerticalScroller: verticalScrollBarVisible && !useCustomScrollBars];
+		[scrollView setHasHorizontalScroller: showHorizontalScroll && !useCustomScrollBars];
 		SetVerticalScrollPos();
 		enteredSetScrollingSize = false;
 	}
@@ -1669,10 +1680,16 @@ void ScintillaCocoa::Resize()
  * Update fields to match scroll position after receiving a notification that the user has scrolled.
  */
 void ScintillaCocoa::UpdateForScroll() {
+  // KOMODO: Invalidate the margin, otherwise it will not update - bug 99808.
+  wMargin.InvalidateAll();
+  // KOMODO: end
+
   Point ptOrigin = GetVisibleOriginInMain();
   xOffset = ptOrigin.x;
   int newTop = Platform::Minimum(ptOrigin.y / vs.lineHeight, MaxScrollPos());
   SetTopLine(newTop);
+  // Send pending scroll notifications.
+  NotifyUpdateUI();
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -1688,26 +1705,43 @@ void ScintillaCocoa::UpdateForScroll() {
  */
 void ScintillaCocoa::RegisterNotifyCallback(intptr_t windowid, SciNotifyFunc callback)
 {
-  notifyObj = windowid;
-  notifyProc = callback;
+  notificationHandlers.push_back(NotificationHandler(windowid, callback));
+}
+
+void ScintillaCocoa::unregisterNotifyCallback(intptr_t windowid, SciNotifyFunc callback)
+{
+  std::vector<NotificationHandler>::iterator it = std::find(notificationHandlers.begin(),
+								  notificationHandlers.end(),
+								  NotificationHandler(windowid, callback));
+  if (it != notificationHandlers.end()) {
+    notificationHandlers.erase(it);
+  }
 }
 
 //--------------------------------------------------------------------------------------------------
 
 void ScintillaCocoa::NotifyChange()
 {
-  if (notifyProc != NULL)
-    notifyProc(notifyObj, WM_COMMAND, Platform::LongFromTwoShorts(GetCtrlID(), SCEN_CHANGE),
-	       (uintptr_t) this);
+  std::vector<NotificationHandler>::iterator it;
+  for (it = notificationHandlers.begin(); it != notificationHandlers.end(); it++)
+  {
+    it->callback(it->windowid, WM_COMMAND,
+		      Platform::LongFromTwoShorts(GetCtrlID(), SCEN_CHANGE),
+	              (uintptr_t) this);
+  }
 }
 
 //--------------------------------------------------------------------------------------------------
 
 void ScintillaCocoa::NotifyFocus(bool focus)
 {
-  if (notifyProc != NULL)
-    notifyProc(notifyObj, WM_COMMAND, Platform::LongFromTwoShorts(GetCtrlID(), (focus ? SCEN_SETFOCUS : SCEN_KILLFOCUS)),
-	       (uintptr_t) this);
+  std::vector<NotificationHandler>::iterator it;
+  for (it = notificationHandlers.begin(); it != notificationHandlers.end(); it++)
+  {
+    it->callback(it->windowid, WM_COMMAND,
+		      Platform::LongFromTwoShorts(GetCtrlID(), (focus ? SCEN_SETFOCUS : SCEN_KILLFOCUS)),
+	              (uintptr_t) this);
+  }
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -1719,12 +1753,13 @@ void ScintillaCocoa::NotifyFocus(bool focus)
  * @param scn The notification to send.
  */
 void ScintillaCocoa::NotifyParent(SCNotification scn)
-{ 
-  if (notifyProc != NULL)
+{
+  std::vector<NotificationHandler>::iterator it;
+  for (it = notificationHandlers.begin(); it != notificationHandlers.end(); it++)
   {
     scn.nmhdr.hwndFrom = (void*) this;
     scn.nmhdr.idFrom = GetCtrlID();
-    notifyProc(notifyObj, WM_NOTIFY, (uintptr_t) 0, (uintptr_t) &scn);
+    it->callback(it->windowid, WM_NOTIFY, (uintptr_t) 0, (uintptr_t) &scn);
   }
 }
 
@@ -2004,7 +2039,8 @@ void ScintillaCocoa::MouseWheel(NSEvent* event)
     else
     dY = (int) sqrt(10.0 * [event deltaY]);
   
-  if (command)
+    
+  if (command && !suppressZoomOnScrollWheel)
   {
     // Zoom! We play with the font sizes in the styles.
     // Number of steps/line is ignored, we just care if sizing up or down.

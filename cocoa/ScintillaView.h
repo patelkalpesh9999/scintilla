@@ -92,6 +92,8 @@ extern NSString *SCIUpdateUINotification;
   int mInitialInfoBarWidth;
 
   id<ScintillaNotificationProtocol> mDelegate;
+
+  BOOL mScrollerForceHide;
 }
 
 @property (nonatomic, readonly) Scintilla::ScintillaCocoa* backend;
@@ -111,6 +113,7 @@ extern NSString *SCIUpdateUINotification;
 // Scroller handling
 - (void) setMarginWidth: (int) width;
 - (void) scrollerAction: (id) sender;
+- (void) setScrollForceHide: (BOOL) hide;
 - (InnerView*) content;
 
 // NSTextView compatibility layer.

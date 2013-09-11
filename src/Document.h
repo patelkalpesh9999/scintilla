@@ -25,7 +25,7 @@ const Position invalidPosition = -1;
  * as is the case for the selection where the end position is the position of the caret.
  * If either position is invalidPosition then the range is invalid and most operations will fail.
  */
-class Range {
+class SCIAPI Range {
 public:
 	Position start;
 	Position end;
@@ -176,11 +176,11 @@ public:
 
 /**
  */
-class Document : PerLine, public IDocumentWithLineEnd, public ILoader {
+class SCIAPI Document : PerLine, public IDocumentWithLineEnd, public ILoader {
 
 public:
 	/** Used to pair watcher pointer with user data. */
-	struct WatcherWithUserData {
+	struct SCIAPI WatcherWithUserData {
 		DocWatcher *watcher;
 		void *userData;
 		WatcherWithUserData(DocWatcher *watcher_=0, void *userData_=0) :
@@ -259,6 +259,8 @@ public:
 	int LenChar(int pos);
 	bool InGoodUTF8(int pos, int &start, int &end) const;
 	int MovePositionOutsideChar(int pos, int moveDir, bool checkLineEnd=true);
+	// ACTIVESTATE	
+	int GetBytePositionForCharOffset(int bytePos, int charOffset, bool checkLineEnd=true);
 	int NextPosition(int pos, int moveDir) const;
 	bool NextCharacter(int &pos, int moveDir) const;	// Returns true if pos changed
 	int SCI_METHOD GetRelativePosition(int positionStart, int characterOffset) const;
@@ -371,6 +373,7 @@ public:
 	void SCI_METHOD DecorationFillRange(int position, int value, int fillLength);
 
 	int SCI_METHOD SetLineState(int line, int state);
+	int SCI_METHOD SetLineStateNoNotify(int line, int state);
 	int SCI_METHOD GetLineState(int line) const;
 	int GetMaxLineState();
 	void SCI_METHOD ChangeLexerState(int start, int end);
@@ -438,7 +441,7 @@ public:
  * scope of the change.
  * If the DocWatcher is a document view then this can be used to optimise screen updating.
  */
-class DocModification {
+class SCIAPI DocModification {
 public:
   	int modificationType;
 	int position;
@@ -481,7 +484,7 @@ public:
  * A class that wants to receive notifications from a Document must be derived from DocWatcher
  * and implement the notification methods. It can then be added to the watcher list with AddWatcher.
  */
-class DocWatcher {
+class SCIAPI DocWatcher {
 public:
 	virtual ~DocWatcher() {}
 

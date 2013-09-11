@@ -32,11 +32,11 @@ static char **ArrayFromWordList(char *wordlist, int *len, bool onlyLineEnds = fa
 	for (int i=0; i<256; i++) {
 		wordSeparator[i] = false;
 	}
-	wordSeparator['\r'] = true;
-	wordSeparator['\n'] = true;
+	wordSeparator[(int)'\r'] = true;
+	wordSeparator[(int)'\n'] = true;
 	if (!onlyLineEnds) {
-		wordSeparator[' '] = true;
-		wordSeparator['\t'] = true;
+		wordSeparator[(int)' '] = true;
+		wordSeparator[(int)'\t'] = true;
 	}
 	for (int j = 0; wordlist[j]; j++) {
 		int curr = static_cast<unsigned char>(wordlist[j]);
@@ -161,7 +161,7 @@ bool WordList::InList(const char *s) const {
 			j++;
 		}
 	}
-	j = starts['^'];
+	j = starts[(int)'^'];
 	if (j >= 0) {
 		while (words[j][0] == '^') {
 			const char *a = words[j] + 1;
@@ -187,7 +187,7 @@ bool WordList::InListAbbreviated(const char *s, const char marker) const {
 	if (0 == words)
 		return false;
 	unsigned char firstChar = s[0];
-	int j = starts[firstChar];
+	int j = starts[(int)firstChar];
 	if (j >= 0) {
 		while (static_cast<unsigned char>(words[j][0]) == firstChar) {
 			bool isSubword = false;
@@ -213,7 +213,7 @@ bool WordList::InListAbbreviated(const char *s, const char marker) const {
 			j++;
 		}
 	}
-	j = starts['^'];
+	j = starts[(int)'^'];
 	if (j >= 0) {
 		while (words[j][0] == '^') {
 			const char *a = words[j] + 1;

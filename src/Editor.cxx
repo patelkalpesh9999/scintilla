@@ -164,6 +164,7 @@ Editor::Editor() {
 	trackLineWidth = false;
 	lineWidthMaxSeen = 0;
 	verticalScrollBarVisible = true;
+	useCustomScrollBars = false;
 	endAtLastLine = true;
 	caretSticky = SC_CARETSTICKY_OFF;
 	marginOptions = SC_MARGINOPTION_NONE;
@@ -230,6 +231,15 @@ Editor::Editor() {
 
 	llc.SetLevel(LineLayoutCache::llcCaret);
 	posCache.SetSize(0x400);
+
+	// XXX ActiveState prevent minimap selection-claiming (bug 97956)
+	rejectSelectionClaim = false;
+
+	// ActiveState suppress drag/drop when in minimap (bug 97159)
+	suppressDragDrop = false;
+
+	// ActiveState hook cmd-scroll-wheel zooming pref (bug 98938)
+	suppressZoomOnScrollWheel = false;
 }
 
 Editor::~Editor() {
@@ -624,6 +634,10 @@ int Editor::PositionFromLineX(int lineDoc, int x) {
  * @return true if calling code should stop drawing.
  */
 bool Editor::AbandonPaint() {
+	// KOMODO performance - never abandon paint - just leave as is... there
+	//                      will always be another paint.
+	//                      Bug 97330, bug 97214.
+	return false;
 	if ((paintState == painting) && !paintingAllText) {
 		paintState = paintAbandoned;
 	}
@@ -902,6 +916,11 @@ bool Editor::SelectionContainsProtected() {
 /**
  * Asks document to find a good position and then moves out of any invisible positions.
  */
+// ACTIVESTATE
+int Editor::GetBytePositionForCharOffset(int bytePos, int charOffset, bool checkLineEnd) {
+	return pdoc->GetBytePositionForCharOffset(bytePos, charOffset, checkLineEnd);
+}
+
 int Editor::MovePositionOutsideChar(int pos, int moveDir, bool checkLineEnd) const {
 	return MovePositionOutsideChar(SelectionPosition(pos), moveDir, checkLineEnd).Position();
 }
@@ -933,6 +952,9 @@ int Editor::MovePositionTo(SelectionPosition newPos, Selection::selTypes selt, b
 	bool simpleCaret = (sel.Count() == 1) && sel.Empty();
 	SelectionPosition spCaret = sel.Last();
 
+	if (sel.enforceRectangular) {
+		selt = Selection::selRectangle;
+	}
 	int delta = newPos.Position() - sel.MainCaret();
 	newPos = ClampPositionIntoDocument(newPos);
 	newPos = MovePositionOutsideChar(newPos, delta);
@@ -1786,7 +1808,7 @@ void DrawStyledText(Surface *surface, ViewStyle &vs, int styleOffset, PRectangle
 			PRectangle rcSegment = rcText;
 			rcSegment.left = x;
 			rcSegment.right = x + width + 1;
-			surface->DrawTextNoClip(rcSegment, vs.styles[style].font,
+			surface->DrawTextClipped(rcSegment, vs.styles[style].font,
 					ascent, st.text + start + i,
 					static_cast<int>(end - i + 1),
 					vs.styles[style].fore,
@@ -1796,7 +1818,7 @@ void DrawStyledText(Surface *surface, ViewStyle &vs, int styleOffset, PRectangle
 		}
 	} else {
 		size_t style = st.style + styleOffset;
-		surface->DrawTextNoClip(rcText, vs.styles[style].font,
+		surface->DrawTextClipped(rcText, vs.styles[style].font,
 				rcText.top + vs.maxAscent, st.text + start,
 				static_cast<int>(length),
 				vs.styles[style].fore,
@@ -2046,8 +2068,10 @@ void Editor::PaintSelMargin(Surface *surfWindow, PRectangle &rc) {
 					if (firstSubLine) {
 						const StyledText stMargin  = pdoc->MarginStyledText(lineDoc);
 						if (stMargin.text && ValidStyledText(vs, vs.marginStyleOffset, stMargin)) {
-							surface->FillRectangle(rcMarker,
-								vs.styles[stMargin.StyleAt(0)+vs.marginStyleOffset].back);
+							if (!stMargin.multipleStyles) {
+								surface->FillRectangle(rcMarker,
+									vs.styles[stMargin.StyleAt(0)+vs.marginStyleOffset].back);
+							}
 							if (vs.ms[margin].style == SC_MARGIN_RTEXT) {
 								int width = WidestLineWidth(surface, vs, vs.marginStyleOffset, stMargin);
 								rcMarker.left = rcMarker.right - width - 3;
@@ -2723,7 +2747,13 @@ void Editor::DrawIndicators(Surface *surface, ViewStyle &vsDraw, int line, int x
 					endPos = posLineEnd;
 				DrawIndicator(deco->indicator, startPos - posLineStart, endPos - posLineStart,
 					surface, vsDraw, xStart, rcLine, ll, subLine);
+				// Fix bug 96771: make sure we keep advancing startPos
+				int lastStartPos = startPos;
 				startPos = deco->rs.EndRun(endPos);
+				if (startPos <= lastStartPos) {
+					// fprintf(stderr, "Bailing out of drawing indicators, startPos stuck at %d\n", startPos);
+					break;
+				}
 			}
 		}
 	}
@@ -4373,7 +4403,7 @@ void Editor::DelChar() {
 void Editor::DelCharBack(bool allowLineStartDeletion) {
 	if (!sel.IsRectangular())
 		FilterSelections();
-	if (sel.IsRectangular())
+	if (sel.IsRectangular() || sel.Count() > 1)
 		allowLineStartDeletion = false;
 	UndoGroup ug(pdoc, (sel.Count() > 1) || !sel.Empty());
 	if (sel.Empty()) {
@@ -4506,6 +4536,7 @@ bool Editor::NotifyUpdateUI() {
 		SCNotification scn = {0};
 		scn.nmhdr.code = SCN_UPDATEUI;
 		scn.updated = needUpdateUI;
+		scn.length = GetTextRectangle().Width();
 		NotifyParent(scn);
 		needUpdateUI = 0;
 		return true;
@@ -4586,7 +4617,7 @@ void Editor::NotifyDwelling(Point pt, bool state) {
 	SCNotification scn = {0};
 	scn.nmhdr.code = state ? SCN_DWELLSTART : SCN_DWELLEND;
 	scn.position = PositionFromLocation(pt, true);
-	scn.x = pt.x;
+	scn.x = pt.x + vs.ExternalMarginWidth();
 	scn.y = pt.y;
 	NotifyParent(scn);
 }
@@ -5135,6 +5166,9 @@ void Editor::NewLine() {
 }
 
 void Editor::CursorUpOrDown(int direction, Selection::selTypes selt) {
+	if (sel.enforceRectangular) {
+		selt = Selection::selRectangle;
+	}
 	SelectionPosition caretToUse = sel.Range(sel.Main()).caret;
 	if (sel.IsRectangular()) {
 		if (selt ==  Selection::noSel) {
@@ -5190,6 +5224,9 @@ void Editor::CursorUpOrDown(int direction, Selection::selTypes selt) {
 }
 
 void Editor::ParaUpOrDown(int direction, Selection::selTypes selt) {
+	if (sel.enforceRectangular) {
+		selt = Selection::selRectangle;
+	}
 	int lineDoc, savedPos = sel.MainCaret();
 	do {
 		MovePositionTo(SelectionPosition(direction > 0 ? pdoc->ParaDown(sel.MainCaret()) : pdoc->ParaUp(sel.MainCaret())), selt);
@@ -6079,6 +6116,9 @@ void Editor::StartDrag() {
 
 void Editor::DropAt(SelectionPosition position, const char *value, size_t lengthValue, bool moving, bool rectangular) {
 	//Platform::DebugPrintf("DropAt %d %d\n", inDragDrop, position);
+	if (suppressDragDrop) {
+		return; // bug 97159
+	}
 	if (inDragDrop == ddDragging)
 		dropWentOutside = false;
 
@@ -6204,19 +6244,31 @@ void Editor::TrimAndSetSelection(int currentPos_, int anchor_) {
 	SetSelection(currentPos_, anchor_);
 }
 
+static int nextVisibleLine(int lineNo, ContractionState& cs) {
+	return cs.DocFromDisplay(cs.DisplayFromDoc(lineNo) + 1);
+}
+
 void Editor::LineSelection(int lineCurrentPos_, int lineAnchorPos_, bool wholeLine) {
 	int selCurrentPos, selAnchorPos;
 	if (wholeLine) {
 		int lineCurrent_ = pdoc->LineFromPosition(lineCurrentPos_);
 		int lineAnchor_ = pdoc->LineFromPosition(lineAnchorPos_);
+		int nextLineNo;
 		if (lineAnchorPos_ < lineCurrentPos_) {
-			selCurrentPos = pdoc->LineStart(lineCurrent_ + 1);
+			nextLineNo = nextVisibleLine(lineCurrent_, cs);
+			selCurrentPos = pdoc->LineStart(nextLineNo);
 			selAnchorPos = pdoc->LineStart(lineAnchor_);
 		} else if (lineAnchorPos_ > lineCurrentPos_) {
+			nextLineNo = nextVisibleLine(lineAnchor_, cs);
 			selCurrentPos = pdoc->LineStart(lineCurrent_);
-			selAnchorPos = pdoc->LineStart(lineAnchor_ + 1);
+			selAnchorPos = pdoc->LineStart(nextLineNo);
 		} else { // Same line, select it
-			selCurrentPos = pdoc->LineStart(lineAnchor_ + 1);
+			nextLineNo = nextVisibleLine(lineAnchor_, cs);
+			if (nextLineNo <= lineAnchor_ && lineAnchor_ < pdoc->LinesTotal()) {
+				// Bug 98494 -- Make sure we advance with wrapped lines.
+				nextLineNo = lineAnchor_ + 1;
+			}
+			selCurrentPos = pdoc->LineStart(nextLineNo);
 			selAnchorPos = pdoc->LineStart(lineAnchor_);
 		}
 	} else {
@@ -6514,7 +6566,7 @@ void Editor::ButtonMove(Point pt) {
 	movePos = MovePositionOutsideChar(movePos, sel.MainCaret() - movePos.Position());
 
 	if (inDragDrop == ddInitial) {
-		if (DragThreshold(ptMouseLast, pt)) {
+		if (!suppressDragDrop && DragThreshold(ptMouseLast, pt)) {
 			SetMouseCapture(false);
 			SetDragPosition(movePos);
 			CopySelectionRange(&drag);
@@ -7932,16 +7984,20 @@ sptr_t Editor::WndProc(unsigned int iMessage, uptr_t wParam, sptr_t lParam) {
 		break;
 
 	case SCI_POSITIONFROMPOINT:
-		return PositionFromLocation(Point(wParam, lParam), false, false);
+		return PositionFromLocation(Point(wParam - vs.ExternalMarginWidth(), lParam),
+					    false, false);
 
 	case SCI_POSITIONFROMPOINTCLOSE:
-		return PositionFromLocation(Point(wParam, lParam), true, false);
+		return PositionFromLocation(Point(wParam - vs.ExternalMarginWidth(), lParam),
+					    true, false);
 
 	case SCI_CHARPOSITIONFROMPOINT:
-		return PositionFromLocation(Point(wParam, lParam), false, true);
+		return PositionFromLocation(Point(wParam - vs.ExternalMarginWidth(), lParam),
+					    false, true);
 
 	case SCI_CHARPOSITIONFROMPOINTCLOSE:
-		return PositionFromLocation(Point(wParam, lParam), true, true);
+		return PositionFromLocation(Point(wParam - vs.ExternalMarginWidth(), lParam),
+					    true, true);
 
 	case SCI_GOTOLINE:
 		GoToLine(wParam);
@@ -8243,6 +8299,17 @@ sptr_t Editor::WndProc(unsigned int iMessage, uptr_t wParam, sptr_t lParam) {
 
 	case SCI_FINDCOLUMN:
 		return pdoc->FindColumn(wParam, lParam);
+
+	case SCI_SETUSECUSTOMSCROLLBARS:
+		if (useCustomScrollBars != (wParam != 0)) {
+			useCustomScrollBars = wParam != 0;
+			SetScrollBars();
+			ReconfigureScrollBars();
+		}
+		break;
+
+	case SCI_GETUSECUSTOMSCROLLBARS:
+		return useCustomScrollBars;
 
 	case SCI_SETHSCROLLBAR :
 		if (horizontalScrollBarVisible != (wParam != 0)) {
@@ -8704,7 +8771,7 @@ sptr_t Editor::WndProc(unsigned int iMessage, uptr_t wParam, sptr_t lParam) {
 
 	case SCI_SETSELBACK:
 		vs.selbackset = wParam != 0;
-		vs.selbackground = ColourDesired(lParam);
+		vs.selbackground = vs.selbackground2 = ColourDesired(lParam);
 		vs.selAdditionalBackground = ColourDesired(lParam);
 		InvalidateStyleRedraw();
 		break;
@@ -9082,22 +9149,27 @@ sptr_t Editor::WndProc(unsigned int iMessage, uptr_t wParam, sptr_t lParam) {
 			case SC_SEL_STREAM:
 				sel.SetMoveExtends(!sel.MoveExtends() || (sel.selType != Selection::selStream));
 				sel.selType = Selection::selStream;
+				sel.enforceRectangular = false;
 				break;
 			case SC_SEL_RECTANGLE:
 				sel.SetMoveExtends(!sel.MoveExtends() || (sel.selType != Selection::selRectangle));
 				sel.selType = Selection::selRectangle;
+				sel.enforceRectangular = true;
 				break;
 			case SC_SEL_LINES:
 				sel.SetMoveExtends(!sel.MoveExtends() || (sel.selType != Selection::selLines));
 				sel.selType = Selection::selLines;
+				sel.enforceRectangular = false;
 				break;
 			case SC_SEL_THIN:
 				sel.SetMoveExtends(!sel.MoveExtends() || (sel.selType != Selection::selThin));
 				sel.selType = Selection::selThin;
+				sel.enforceRectangular = false;
 				break;
 			default:
 				sel.SetMoveExtends(!sel.MoveExtends() || (sel.selType != Selection::selStream));
 				sel.selType = Selection::selStream;
+				sel.enforceRectangular = false;
 			}
 			InvalidateSelection(sel.RangeMain(), true);
 		}
@@ -9234,6 +9306,52 @@ sptr_t Editor::WndProc(unsigned int iMessage, uptr_t wParam, sptr_t lParam) {
 
 	case SCI_GETPASTECONVERTENDINGS:
 		return convertPastes ? 1 : 0;
+ 
+	// ACTIVESTATE Komodo-only function.
+	case SCI_POSITIONATCHAR:
+		// The 'false' is to ensure CRLF is treated at _two_ chars
+		// instead of one, as MovePositionOutsideChar (the underlying
+		// function) would otherwise do. (E.g., for the find system
+		// which must treat CRLF as two characters).
+		return pdoc->GetBytePositionForCharOffset(wParam, lParam, false);
+
+	case SCI_POSITIONATCOLUMN:
+		return pdoc->FindColumn(wParam, lParam);
+
+	case SCI_SETDRAGPOSITION:
+		SetDragPosition(SelectionPosition(wParam));
+		break;
+
+	case SCI_GETDRAGPOSITION:
+		return posDrag.Position();
+
+	case SCI_STOPTIMERS: // This patch from stop_timers.patch
+		SetTicking(false);
+		SetIdle(false);
+		break;
+
+	case SCI_SETREJECTSELECTIONCLAIM: // bug 97956
+		rejectSelectionClaim = wParam;
+		break;
+
+	case SCI_GETREJECTSELECTIONCLAIM: //  bug 97956
+		return rejectSelectionClaim;
+
+	case SCI_SETSUPPRESSDRAGDROP: // bug 97159
+		suppressDragDrop = wParam;
+		break;
+
+	case SCI_GETSUPPRESSDRAGDROP: //  bug 97159
+		return suppressDragDrop;
+
+	case SCI_SETSUPPRESSZOOMONSCROLLWHEEL: // bug 98938
+		suppressZoomOnScrollWheel = wParam;
+		break;
+
+	case SCI_GETSUPPRESSZOOMONSCROLLWHEEL: //  bug 98938
+		return suppressZoomOnScrollWheel;
+
+	// END ACTIVESTATE
 
 	case SCI_GETCHARACTERPOINTER:
 		return reinterpret_cast<sptr_t>(pdoc->BufferPointer());
@@ -9606,6 +9724,10 @@ sptr_t Editor::WndProc(unsigned int iMessage, uptr_t wParam, sptr_t lParam) {
 
 	case SCI_GETIDENTIFIER:
 		return GetCtrlID();
+
+	case SCI_RELEASEMOUSECAPTURE:
+		SetMouseCapture(false);
+		break;
 
 	case SCI_SETTECHNOLOGY:
 		// No action by default

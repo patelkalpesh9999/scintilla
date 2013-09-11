@@ -342,8 +342,12 @@ void LineMarker::Draw(Surface *surface, PRectangle &rcWhole, Font &fontForCharac
 		XYPOSITION width = surface->WidthText(fontForCharacter, character, 1);
 		rc.left += (rc.Width() - width) / 2;
 		rc.right = rc.left + width;
-		surface->DrawTextClipped(rc, fontForCharacter, rc.bottom - 2,
-			character, 1, fore, back);
+		// ACTIVESTATE Komodo use transparent background for margin symbols, and more
+		// buffer under character.
+		// XXX unfortunately, spacing at the bottom doesn't work well for all font
+		// sizes, some kind of more complex font size calculation needs to happen
+		surface->DrawTextTransparent(rc, fontForCharacter, rc.bottom - 4,
+			character, 1, fore);
 
 	} else if (markType == SC_MARK_DOTDOTDOT) {
 		int right = centreX - 6;

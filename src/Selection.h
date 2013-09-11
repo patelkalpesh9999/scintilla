@@ -144,6 +144,7 @@ public:
 	Selection();
 	~Selection();
 	bool IsRectangular() const;
+	bool enforceRectangular;
 	int MainCaret() const;
 	int MainAnchor() const;
 	SelectionRange &Rectangular();

@@ -33,9 +33,6 @@ using namespace Scintilla;
 static bool IsSpaceEquiv(int state) {
 	return (state <= SCE_C_COMMENTDOC
 	    // including SCE_C_DEFAULT, SCE_C_COMMENT, SCE_C_COMMENTLINE
-	    || state == SCE_C_COMMENTLINEDOC
-	    || state == SCE_C_COMMENTDOCKEYWORD
-	    || state == SCE_C_COMMENTDOCKEYWORDERROR
 	    || state == SCE_COFFEESCRIPT_COMMENTBLOCK
 	    || state == SCE_COFFEESCRIPT_VERBOSE_REGEX
 	    || state == SCE_COFFEESCRIPT_VERBOSE_REGEX_COMMENT
@@ -119,22 +116,6 @@ static void ColouriseCoffeeScriptDoc(unsigned int startPos, int length, int init
 	bool continuationLine = false;
 	bool isIncludePreprocessor = false;
 
-	if (initStyle == SCE_C_PREPROCESSOR) {
-		// Set continuationLine if last character of previous line is '\'
-		int lineCurrent = styler.GetLine(startPos);
-		if (lineCurrent > 0) {
-			int chBack = styler.SafeGetCharAt(startPos-1, 0);
-			int chBack2 = styler.SafeGetCharAt(startPos-2, 0);
-			int lineEndChar = '!';
-			if (chBack2 == '\r' && chBack == '\n') {
-				lineEndChar = styler.SafeGetCharAt(startPos-3, 0);
-			} else if (chBack == '\n' || chBack == '\r') {
-				lineEndChar = chBack2;
-			}
-			continuationLine = lineEndChar == '\\';
-		}
-	}
-
 	// look back to set chPrevNonWhite properly for better regex colouring
 	int endPos = startPos + length;
         if (startPos > 0 && IsSpaceEquiv(initStyle)) {
@@ -204,65 +185,9 @@ static void ColouriseCoffeeScriptDoc(unsigned int startPos, int length, int init
 					sc.SetState(SCE_C_DEFAULT);
 				}
 				break;
-			case SCE_C_PREPROCESSOR:
-				if (sc.atLineStart && !continuationLine) {
-					sc.SetState(SCE_C_DEFAULT);
-				} else if (stylingWithinPreprocessor) {
-					if (IsASpace(sc.ch)) {
-						sc.SetState(SCE_C_DEFAULT);
-					}
-				} else {
-					if (sc.Match('/', '*') || sc.Match('/', '/')) {
-						sc.SetState(SCE_C_DEFAULT);
-					}
-				}
-				break;
-			case SCE_C_COMMENT:
-				if (sc.Match('*', '/')) {
-					sc.Forward();
-					sc.ForwardSetState(SCE_C_DEFAULT);
-				}
-				break;
-			case SCE_C_COMMENTDOC:
-				if (sc.Match('*', '/')) {
-					sc.Forward();
-					sc.ForwardSetState(SCE_C_DEFAULT);
-				} else if (sc.ch == '@' || sc.ch == '\\') { // JavaDoc and Doxygen support
-					// Verify that we have the conditions to mark a comment-doc-keyword
-					if ((IsASpace(sc.chPrev) || sc.chPrev == '*') && (!IsASpace(sc.chNext))) {
-						styleBeforeDCKeyword = SCE_C_COMMENTDOC;
-						sc.SetState(SCE_C_COMMENTDOCKEYWORD);
-					}
-				}
-				break;
 			case SCE_C_COMMENTLINE:
 				if (sc.atLineStart) {
 					sc.SetState(SCE_C_DEFAULT);
-				}
-				break;
-			case SCE_C_COMMENTLINEDOC:
-				if (sc.atLineStart) {
-					sc.SetState(SCE_C_DEFAULT);
-				} else if (sc.ch == '@' || sc.ch == '\\') { // JavaDoc and Doxygen support
-					// Verify that we have the conditions to mark a comment-doc-keyword
-					if ((IsASpace(sc.chPrev) || sc.chPrev == '/' || sc.chPrev == '!') && (!IsASpace(sc.chNext))) {
-						styleBeforeDCKeyword = SCE_C_COMMENTLINEDOC;
-						sc.SetState(SCE_C_COMMENTDOCKEYWORD);
-					}
-				}
-				break;
-			case SCE_C_COMMENTDOCKEYWORD:
-				if ((styleBeforeDCKeyword == SCE_C_COMMENTDOC) && sc.Match('*', '/')) {
-					sc.ChangeState(SCE_C_COMMENTDOCKEYWORDERROR);
-					sc.Forward();
-					sc.ForwardSetState(SCE_C_DEFAULT);
-				} else if (!setDoxygen.Contains(sc.ch)) {
-					char s[100];
-					sc.GetCurrent(s, sizeof(s));
-					if (!IsASpace(sc.ch) || !keywords3.InList(s + 1)) {
-						sc.ChangeState(SCE_C_COMMENTDOCKEYWORDERROR);
-					}
-					sc.SetState(styleBeforeDCKeyword);
 				}
 				break;
 			case SCE_C_STRING:
@@ -368,13 +293,6 @@ static void ColouriseCoffeeScriptDoc(unsigned int startPos, int length, int init
 				} else {
 					sc.SetState(SCE_C_IDENTIFIER);
 				}
-			} else if (sc.Match('/', '*')) {
-				if (sc.Match("/**") || sc.Match("/*!")) {	// Support of Qt/Doxygen doc. style
-					sc.SetState(SCE_C_COMMENTDOC);
-				} else {
-					sc.SetState(SCE_C_COMMENT);
-				}
-				sc.Forward();	// Eat the * so it isn't used for the end of the comment
 			} else if (sc.Match("///")) {
 				sc.SetState(SCE_COFFEESCRIPT_VERBOSE_REGEX);
 				sc.Forward();

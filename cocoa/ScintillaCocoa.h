@@ -22,6 +22,13 @@
 #include <vector>
 #include <map>
 
+#import <Cocoa/Cocoa.h>
+#if MAC_OS_X_VERSION_MAX_ALLOWED > MAC_OS_X_VERSION_10_5
+#import <QuartzCore/CAGradientLayer.h>
+#endif
+#import <QuartzCore/CAAnimation.h>
+#import <QuartzCore/CATransaction.h>
+
 #include "ILexer.h"
 
 #ifdef SCI_LEXER
@@ -52,6 +59,8 @@
 
 #include "ScintillaBase.h"
 #include "CaseConvert.h"
+
+//#define SCINTILLA_COCOA_DEBUG
 
 extern "C" NSString* ScintillaRecPboardType;
 
@@ -97,6 +106,17 @@ typedef void(*SciNotifyFunc) (intptr_t windowid, unsigned int iMessage, uintptr_
 #define	WM_COMMAND	1001
 #define WM_NOTIFY	1002
 
+class NotificationHandler {
+public:
+  intptr_t windowid;
+  SciNotifyFunc callback;
+
+  NotificationHandler(intptr_t id, SciNotifyFunc cb) : windowid(id), callback(cb) { }
+  bool operator==(const NotificationHandler &handler) const {
+    return (windowid == handler.windowid && callback == handler.callback);
+  }
+};
+
 /**
  * Main scintilla class, implemented for OS X (Cocoa).
  */
@@ -106,8 +126,7 @@ private:
   TimerTarget* timerTarget;
   NSEvent* lastMouseEvent;
   
-  SciNotifyFunc	notifyProc;
-  intptr_t notifyObj;
+  std::vector<NotificationHandler> notificationHandlers;
 
   bool capturedMouse;
 
@@ -144,6 +163,8 @@ public:
   virtual ~ScintillaCocoa();
 
   void RegisterNotifyCallback(intptr_t windowid, SciNotifyFunc callback);
+  // lower-case 'u' is deliberate.
+  void unregisterNotifyCallback(intptr_t windowid, SciNotifyFunc callback);
   sptr_t WndProc(unsigned int iMessage, uptr_t wParam, sptr_t lParam);
 
   ScintillaView* TopContainer();
@@ -218,6 +239,8 @@ public:
   void DraggingExited(id <NSDraggingInfo> info);
   bool PerformDragOperation(id <NSDraggingInfo> info);
   void DragScroll();
+  bool inDragSession() { return inDragDrop == ddDragging; };
+  bool isTracking;
   
   // Promote some methods needed for NSResponder actions.
   virtual void SelectAll();

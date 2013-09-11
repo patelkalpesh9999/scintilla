@@ -10,7 +10,7 @@
 #define SPLITVECTOR_H
 
 template <typename T>
-class SplitVector {
+class SCIAPI SplitVector {
 protected:
 	T *body;
 	int size;
@@ -279,5 +279,10 @@ public:
 		return part1Length; 
 	}
 };
+
+#ifdef SCIAPI_DLL
+SCIEXTERN template class SCIAPI SplitVector<int>;
+SCIEXTERN template class SCIAPI SplitVector<char>;
+#endif
 
 #endif

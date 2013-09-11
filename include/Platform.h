@@ -26,6 +26,9 @@
 #define PLAT_CURSES 0
 #define PLAT_TK 0
 
+#define SCIAPI
+#define SCIEXTERN
+
 #if defined(FOX)
 #undef PLAT_FOX
 #define PLAT_FOX 1
@@ -68,6 +71,17 @@
 #else
 #undef PLAT_WIN
 #define PLAT_WIN 1
+
+#undef SCIAPI
+#undef SCIEXTERN
+
+#ifdef SCIAPI_DLL
+#define SCIAPI __declspec(dllexport)
+#define SCIEXTERN
+#else
+#define SCIAPI __declspec(dllimport)
+#define SCIEXTERN extern
+#endif
 
 #endif
 

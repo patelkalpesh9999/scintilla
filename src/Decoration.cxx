@@ -163,7 +163,10 @@ int DecorationList::AllOnFor(int position) const {
 	int mask = 0;
 	for (Decoration *deco=root; deco; deco = deco->next) {
 		if (deco->rs.ValueAt(position)) {
-			mask |= 1 << deco->indicator;
+			// Indicators above 31 will not work with this API.
+			if (deco->indicator < 32) {
+				mask |= 1 << deco->indicator;
+			}
 		}
 	}
 	return mask;

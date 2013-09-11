@@ -2,6 +2,12 @@
 // ScintillaGTK.cxx - GTK+ specific subclass of ScintillaBase
 // Copyright 1998-2004 by Neil Hodgson <neilh@scintilla.org>
 // The License.txt file describes the conditions under which this software may be distributed.
+ 
+
+// enable focus hack.    // KOMODO
+#define KOMODO_NO_FOCUS  // KOMODO
+#define KOMODO_DISABLE_DRAG_DROP // KOMODO
+
 
 #include <new>
 #include <stdlib.h>
@@ -113,6 +119,10 @@ using namespace Scintilla;
 
 extern std::string UTF8FromLatin1(const char *s, int len);
 
+#ifndef WM_UNICHAR
+#define WM_UNICHAR                      0x0109
+#endif
+
 class ScintillaGTK : public ScintillaBase {
 	_ScintillaObject *sci;
 	Window wText;
@@ -122,6 +132,8 @@ class ScintillaGTK : public ScintillaBase {
 	GtkAdjustment *adjustmenth;
 	int verticalScrollBarWidth;
 	int horizontalScrollBarHeight;
+	// XXX ActiveState prevent recursive Resize
+	bool inResize;
 
 	SelectionText primary;
 
@@ -180,6 +192,11 @@ private:
 public: 	// Public for scintilla_send_message
 	virtual sptr_t WndProc(unsigned int iMessage, uptr_t wParam, sptr_t lParam);
 private:
+	// XXX ActiveState drag scroll support
+	int scrollSpeed;
+	int scrollTicks;
+	void DragScroll();
+
 	virtual sptr_t DefWndProc(unsigned int iMessage, uptr_t wParam, sptr_t lParam);
 	virtual void SetTicking(bool on);
 	virtual bool SetIdle(bool on);
@@ -211,7 +228,9 @@ private:
 	virtual void ClaimSelection();
 	void GetGtkSelectionText(GtkSelectionData *selectionData, SelectionText &selText);
 	void ReceivedSelection(GtkSelectionData *selection_data);
+#ifndef KOMODO_DISABLE_DRAG_DROP
 	void ReceivedDrop(GtkSelectionData *selection_data);
+#endif
 	static void GetSelection(GtkSelectionData *selection_data, guint info, SelectionText *selected);
 	void StoreOnClipboard(SelectionText *clipText);
 	static void ClipboardGetSelection(GtkClipboard* clip, GtkSelectionData *selection_data, guint info, void *data);
@@ -283,6 +302,7 @@ private:
 	static void SelectionGet(GtkWidget *widget, GtkSelectionData *selection_data,
 	                         guint info, guint time);
 	static gint SelectionClear(GtkWidget *widget, GdkEventSelection *selection_event);
+#ifndef KOMODO_DISABLE_DRAG_DROP
 	gboolean DragMotionThis(GdkDragContext *context, gint x, gint y, guint dragtime);
 	static gboolean DragMotion(GtkWidget *widget, GdkDragContext *context,
 	                           gint x, gint y, guint dragtime);
@@ -295,6 +315,7 @@ private:
 	                             gint x, gint y, GtkSelectionData *selection_data, guint info, guint time);
 	static void DragDataGet(GtkWidget *widget, GdkDragContext *context,
 	                        GtkSelectionData *selection_data, guint info, guint time);
+#endif
 	static gboolean TimeOut(ScintillaGTK *sciThis);
 	static gboolean IdleCallback(ScintillaGTK *sciThis);
 	static gboolean StyleIdle(ScintillaGTK *sciThis);
@@ -310,6 +331,10 @@ private:
 
 	static sptr_t DirectFunction(ScintillaGTK *sciThis,
 	                             unsigned int iMessage, uptr_t wParam, sptr_t lParam);
+
+	// functions to localise the focus hacks a bit.  // KOMODO
+	virtual void GrabFocus();                        // KOMODO
+	virtual void ChangeFocusState(bool focus);       // KOMODO
 };
 
 enum {
@@ -359,6 +384,7 @@ static ScintillaGTK *ScintillaFromWidget(GtkWidget *widget) {
 ScintillaGTK::ScintillaGTK(_ScintillaObject *sci_) :
 		adjustmentv(0), adjustmenth(0),
 		verticalScrollBarWidth(30), horizontalScrollBarHeight(30),
+		inResize(false),
 		evbtn(0), capturedMouse(false), dragWasDropped(false),
 		lastKey(0), rectangularSelectionModifier(SCMOD_CTRL), parentClass(0),
 		im_context(NULL),
@@ -409,6 +435,30 @@ static void UnRefCursor(GdkCursor *cursor) {
 #else
 	gdk_cursor_unref(cursor);
 #endif
+}
+
+// KOMODO HACK
+void
+ScintillaGTK::GrabFocus()
+{
+#ifdef KOMODO_NO_FOCUS
+	//SetFocusState(true);
+#else
+	gtk_widget_grab_focus(PWidget(wMain));
+#endif
+}
+
+// KOMODO HACK
+void
+ScintillaGTK::ChangeFocusState(bool focus)
+{
+#ifndef KOMODO_NO_FOCUS
+	if (focus)
+		GTK_WIDGET_SET_FLAGS(PWidget(wMain), GTK_HAS_FOCUS);
+	else
+		GTK_WIDGET_UNSET_FLAGS(PWidget(wMain), GTK_HAS_FOCUS);
+#endif
+	SetFocusState(focus);
 }
 
 void ScintillaGTK::RealizeThis(GtkWidget *widget) {
@@ -620,7 +670,10 @@ void ScintillaGTK::MainForAll(GtkContainer *container, gboolean include_internal
 
 gint ScintillaGTK::FocusInThis(GtkWidget *widget) {
 	try {
-		SetFocusState(true);
+		ScintillaGTK *sciThis = ScintillaFromWidget(widget);
+		sciThis->ChangeFocusState(true);  // KOMODO INSTEAD OF FOLLOWING TWO LINES
+		//GTK_WIDGET_SET_FLAGS(widget, GTK_HAS_FOCUS);
+		//SetFocusState(true);
 		if (im_context != NULL) {
 			gchar *str = NULL;
 			gint cursor_pos;
@@ -650,7 +703,10 @@ gint ScintillaGTK::FocusIn(GtkWidget *widget, GdkEventFocus * /*event*/) {
 
 gint ScintillaGTK::FocusOutThis(GtkWidget *widget) {
 	try {
-		SetFocusState(false);
+		ScintillaGTK *sciThis = ScintillaFromWidget(widget);
+		sciThis->ChangeFocusState(false);  // KOMODO INSTEAD OF FOLLOWING TWO LINES
+		//GTK_WIDGET_UNSET_FLAGS(widget, GTK_HAS_FOCUS);
+		//SetFocusState(false);
 
 		if (PWidget(wPreedit) != NULL)
 			gtk_widget_hide(PWidget(wPreedit));
@@ -670,7 +726,12 @@ gint ScintillaGTK::FocusOut(GtkWidget *widget, GdkEventFocus * /*event*/) {
 
 void ScintillaGTK::SizeRequest(GtkWidget *widget, GtkRequisition *requisition) {
 	ScintillaGTK *sciThis = ScintillaFromWidget(widget);
-	requisition->width = 1;
+	// XXX ActiveState.  We need to figure out if there is a way to
+	// initialize these values better.  They cause problems with the initial
+	// scroll locations, and also are the cause of our flickering scrollbars
+	// when opening multiple files on startup.  Increasing the width makes
+	// the scrollbar flicker go away.  bug 29103
+	requisition->width = 2000;
 	requisition->height = 1;
 	GtkRequisition child_requisition;
 #if GTK_CHECK_VERSION(3,0,0)
@@ -729,7 +790,9 @@ void ScintillaGTK::Initialise() {
 	gtk_widget_set_can_focus(PWidget(wMain), TRUE);
 	gtk_widget_set_sensitive(PWidget(wMain), TRUE);
 #else
+#ifndef KOMODO_NO_FOCUS
 	GTK_WIDGET_SET_FLAGS(PWidget(wMain), GTK_CAN_FOCUS);
+#endif
 	GTK_WIDGET_SET_FLAGS(GTK_WIDGET(PWidget(wMain)), GTK_SENSITIVE);
 #endif
 	gtk_widget_set_events(PWidget(wMain),
@@ -792,12 +855,14 @@ void ScintillaGTK::Initialise() {
 	gtk_widget_set_parent(PWidget(scrollbarh), PWidget(wMain));
 	gtk_widget_show(PWidget(scrollbarh));
 
-	gtk_widget_grab_focus(PWidget(wMain));
+	GrabFocus(); // KOMODO -- instead of following:
+	// gtk_widget_grab_focus(PWidget(wMain));
 
+#ifndef KOMODO_DISABLE_DRAG_DROP
 	gtk_drag_dest_set(GTK_WIDGET(PWidget(wMain)),
 	                  GTK_DEST_DEFAULT_ALL, clipboardPasteTargets, nClipboardPasteTargets,
 	                  static_cast<GdkDragAction>(GDK_ACTION_COPY | GDK_ACTION_MOVE));
-
+#endif
 	// Set caret period based on GTK settings
 	gboolean blinkOn = false;
 	if (g_object_class_find_property(G_OBJECT_GET_CLASS(
@@ -839,6 +904,9 @@ bool ScintillaGTK::DragThreshold(Point ptStart, Point ptNow) {
 void ScintillaGTK::StartDrag() {
 	PLATFORM_ASSERT(evbtn != 0);
 	dragWasDropped = false;
+#ifdef KOMODO_DISABLE_DRAG_DROP
+	inDragDrop = ddNone;
+#else
 	inDragDrop = ddDragging;
 	GtkTargetList *tl = gtk_target_list_new(clipboardCopyTargets, nClipboardCopyTargets);
 	gtk_drag_begin(GTK_WIDGET(PWidget(wMain)),
@@ -846,6 +914,7 @@ void ScintillaGTK::StartDrag() {
 	               static_cast<GdkDragAction>(GDK_ACTION_COPY | GDK_ACTION_MOVE),
 	               evbtn->button,
 	               reinterpret_cast<GdkEvent *>(evbtn));
+#endif
 }
 
 static std::string ConvertText(const char *s, size_t len, const char *charSetDest,
@@ -952,7 +1021,8 @@ sptr_t ScintillaGTK::WndProc(unsigned int iMessage, uptr_t wParam, sptr_t lParam
 		switch (iMessage) {
 
 		case SCI_GRABFOCUS:
-			gtk_widget_grab_focus(PWidget(wMain));
+	   	        GrabFocus(); // KOMODO HACK INSTEAD OF:
+			// gtk_widget_grab_focus(PWidget(wMain));
 			break;
 
 		case SCI_GETDIRECTFUNCTION:
@@ -972,7 +1042,19 @@ sptr_t ScintillaGTK::WndProc(unsigned int iMessage, uptr_t wParam, sptr_t lParam
 		case SCI_ENCODEDFROMUTF8:
 			return EncodedFromUTF8(reinterpret_cast<char*>(wParam),
 			        reinterpret_cast<char*>(lParam));
-
+ 
+		case WM_UNICHAR:
+			if (IsUnicodeMode()) {
+				char utfval[4];
+				wchar_t wcs[2] = {static_cast<wchar_t>(wParam), 0};
+				unsigned int len = UTF8Length(wcs, 1);
+				UTF8FromUTF16(wcs, 1, utfval, len);
+				AddCharUTF(utfval, len);
+				return 1;
+			} else {
+				return 0;
+			}
+			
 		case SCI_SETRECTANGULARSELECTIONMODIFIER:
 			rectangularSelectionModifier = wParam;
 			break;
@@ -1104,6 +1186,41 @@ PRectangle ScintillaGTK::GetClientRectangle() {
 	rc.left = 0;
 	rc.top = 0;
 	return rc;
+}
+
+void ScintillaGTK::DragScroll() {
+#define RESET_SCROLL_TIMER(lines) \
+  scrollSpeed = (lines); \
+  scrollTicks = 2000;
+
+    if (!posDrag.IsValid()) {
+        RESET_SCROLL_TIMER(1);
+        return;
+    }
+    int posDragPosition = posDrag.Position();
+    Point dragMouse = LocationFromPosition(posDragPosition);
+    int line = pdoc->LineFromPosition(posDragPosition);
+    int currentVisibleLine = cs.DisplayFromDoc(line);
+    int lastVisibleLine = Platform::Minimum(topLine + LinesOnScreen() - 1, pdoc->LinesTotal() - 1);
+
+    if (currentVisibleLine <= topLine && topLine > 0) {
+        ScrollTo( topLine - scrollSpeed );
+    } else if (currentVisibleLine >= lastVisibleLine) {
+        ScrollTo( topLine + scrollSpeed );
+    } else {
+        RESET_SCROLL_TIMER(1);
+        return;
+    }
+    if (scrollSpeed == 1) {
+        scrollTicks -= timer.tickSize;
+        if (scrollTicks <= 0) {
+            RESET_SCROLL_TIMER(5);
+        }
+    }
+
+    SetDragPosition(SelectionPosition(PositionFromLocation(dragMouse)));//QQQ
+
+#undef RESET_SCROLL_TIMER
 }
 
 void ScintillaGTK::ScrollText(int linesToMove) {
@@ -1355,7 +1472,7 @@ std::string ScintillaGTK::CaseMapString(const std::string &s, int caseMapping) {
 
 int ScintillaGTK::KeyDefault(int key, int modifiers) {
 	// Pass up to container in case it is an accelerator
-	NotifyKey(key, modifiers);
+	AddChar(key);
 	return 0;
 }
 
@@ -1436,6 +1553,10 @@ bool ScintillaGTK::OwnPrimarySelection() {
 void ScintillaGTK::ClaimSelection() {
 	// X Windows has a 'primary selection' as well as the clipboard.
 	// Whenever the user selects some text, we become the primary selection
+	if (rejectSelectionClaim) {
+		// Don't claim minimap selection
+		return;
+	}
 	if (!sel.Empty() && IS_WIDGET_REALIZED(GTK_WIDGET(PWidget(wMain)))) {
 		primarySelection = true;
 		gtk_selection_owner_set(GTK_WIDGET(PWidget(wMain)),
@@ -1462,6 +1583,118 @@ static gint LengthOfGSD(GtkSelectionData *sd) { return sd->length; }
 static GdkAtom TypeOfGSD(GtkSelectionData *sd) { return sd->type; }
 static GdkAtom SelectionOfGSD(GtkSelectionData *sd) { return sd->selection; }
 #endif
+ 
+
+/* SMC UTF-8 detection code below taken from Apache mod_fileiri */
+  
+/*
+ * UTF-8 lead byte enum and table for tight checking
+ * (all this utf-8 stuff probably should go into some library)
+ */
+
+typedef enum {
+    end, /* end of string */
+    ill, /* illegal byte */
+    asc, /* us-ascii     */
+    trl, /* trailing     */
+    by2, /* two bytes    */
+    e0,  /* three bytes, e0 lead byte */
+    by3, /* three bytes, normal case  */
+    ed,  /* three bytes, ed lead byte */ 
+    p13, /* four  bytes, planes 1-3   */
+    by4, /* four  bytes, normal case (planes 4-15) */
+    p16 /* four  bytes, plane 16     */
+} utf8lead;
+
+static utf8lead UTF8lead[256] = {
+    /* should all control codes be illegal? or allowed? */
+    /* never make 0x00 legal, code depends on it being illegal */
+    /* 0x00 */ end,  ill,  ill,  ill,  ill,  ill,  ill,  ill,
+    /* 0x08 */ ill,  asc,  asc,  ill,  ill,  asc,  ill,  ill,
+    /* 0x10 */ ill,  ill,  ill,  ill,  ill,  ill,  ill,  ill,
+    /* 0x18 */ ill,  ill,  ill,  ill,  ill,  ill,  ill,  ill,
+    /* 0x20 */ asc,  asc,  asc,  asc,  asc,  asc,  asc,  asc,
+    /* 0x28 */ asc,  asc,  asc,  asc,  asc,  asc,  asc,  asc,
+    /* 0x30 */ asc,  asc,  asc,  asc,  asc,  asc,  asc,  asc,
+    /* 0x38 */ asc,  asc,  asc,  asc,  asc,  asc,  asc,  asc,
+    /* 0x40 */ asc,  asc,  asc,  asc,  asc,  asc,  asc,  asc,
+    /* 0x48 */ asc,  asc,  asc,  asc,  asc,  asc,  asc,  asc,
+    /* 0x50 */ asc,  asc,  asc,  asc,  asc,  asc,  asc,  asc,
+    /* 0x58 */ asc,  asc,  asc,  asc,  asc,  asc,  asc,  asc,
+    /* 0x60 */ asc,  asc,  asc,  asc,  asc,  asc,  asc,  asc,
+    /* 0x68 */ asc,  asc,  asc,  asc,  asc,  asc,  asc,  asc,
+    /* 0x70 */ asc,  asc,  asc,  asc,  asc,  asc,  asc,  asc,
+    /* 0x78 */ asc,  asc,  asc,  asc,  asc,  asc,  asc,  ill,
+    /* 0x80 */ trl,  trl,  trl,  trl,  trl,  trl,  trl,  trl,
+    /* 0x88 */ trl,  trl,  trl,  trl,  trl,  trl,  trl,  trl,
+    /* 0x90 */ trl,  trl,  trl,  trl,  trl,  trl,  trl,  trl,
+    /* 0x98 */ trl,  trl,  trl,  trl,  trl,  trl,  trl,  trl,
+    /* 0xA0 */ trl,  trl,  trl,  trl,  trl,  trl,  trl,  trl,
+    /* 0xA8 */ trl,  trl,  trl,  trl,  trl,  trl,  trl,  trl,
+    /* 0xB0 */ trl,  trl,  trl,  trl,  trl,  trl,  trl,  trl,
+    /* 0xB8 */ trl,  trl,  trl,  trl,  trl,  trl,  trl,  trl,
+    /* 0xC0 */ ill,  ill,  by2,  by2,  by2,  by2,  by2,  by2,
+    /* 0xC8 */ by2,  by2,  by2,  by2,  by2,  by2,  by2,  by2,
+    /* 0xD0 */ by2,  by2,  by2,  by2,  by2,  by2,  by2,  by2,
+    /* 0xD8 */ by2,  by2,  by2,  by2,  by2,  by2,  by2,  by2,
+    /* 0xE0 */ e0,   by3,  by3,  by3,  by3,  by3,  by3,  by3,
+    /* 0xE8 */ by3,  by3,  by3,  by3,  by3,  ed,   by3,  by3,
+    /* 0xF0 */ p13,  by4,  by4,  by4,  p16,  ill,  ill,  ill,  
+    /* 0x18 */ ill,  ill,  ill,  ill,  ill,  ill,  ill,  ill,
+};
+
+
+static int isUTF8 (const char *data, int len)
+{
+    /* figure out whether the input is UTF-8 */
+    const char *p = data;
+    while (p - data < len) {
+        switch (UTF8lead[*p++]) {
+	  case end:
+            return 1; /* clean end */
+	  case ill:
+	  case trl:
+	    return 0;
+	  case asc:
+	    break;
+	  case by2:
+	    if (UTF8lead[*p++]!=trl)
+		return 0;
+	    break;
+	  case e0 :
+            if ((((*p++)&0xE0)!=0xA0) || (UTF8lead[*p++]!=trl))
+	        return 0;
+            break;
+          case by3:
+	    if ((UTF8lead[*p++]!=trl) || (UTF8lead[*p++]!=trl))
+		return 0;
+            break;
+	  case ed :
+            if ((((*p++)&0xE0)!=0x80) || (UTF8lead[*p++]!=trl))
+	        return 0;
+            break;
+          case p13:
+            if (((*p)<0x90 || 0xBF<(*p++)) 
+	          || (UTF8lead[*p++]!=trl)
+		  || (UTF8lead[*p++]!=trl))
+	        return 0;
+	    break;
+	  case by4:
+	    if ((UTF8lead[*p++]!=trl)
+		  || (UTF8lead[*p++]!=trl)
+                  || (UTF8lead[*p++]!=trl))
+		return 0;
+	    break;
+	  case p16:
+            if ((((*p++)&0xF0)!=0x80)
+		  || (UTF8lead[*p++]!=trl)
+		  || (UTF8lead[*p++]!=trl))
+	        return 0;
+	    break;
+        }
+    }
+    return 0;
+}
 
 // Detect rectangular text, convert line ends to current mode, convert from or to UTF-8
 void ScintillaGTK::GetGtkSelectionText(GtkSelectionData *selectionData, SelectionText &selText) {
@@ -1487,7 +1720,7 @@ void ScintillaGTK::GetGtkSelectionText(GtkSelectionData *selectionData, Selectio
 
 	std::string dest = Document::TransformLineEnds(data, len, pdoc->eolMode);
 	if (selectionTypeData == GDK_TARGET_STRING) {
-		if (IsUnicodeMode()) {
+		if (IsUnicodeMode() && !isUTF8(dest.c_str(), dest.length())) {
 			// Unknown encoding so assume in Latin1
 			dest = UTF8FromLatin1(dest.c_str(), dest.length());
 			selText.Copy(dest, SC_CP_UTF8, 0, isRectangular, false);
@@ -1546,6 +1779,7 @@ void ScintillaGTK::ReceivedSelection(GtkSelectionData *selection_data) {
 	}
 }
 
+#ifndef KOMODO_DISABLE_DRAG_DROP
 void ScintillaGTK::ReceivedDrop(GtkSelectionData *selection_data) {
 	dragWasDropped = true;
 	if (TypeOfGSD(selection_data) == atomUriList || TypeOfGSD(selection_data) == atomDROPFILES_DND) {
@@ -1564,7 +1798,7 @@ void ScintillaGTK::ReceivedDrop(GtkSelectionData *selection_data) {
 	}
 	Redraw();
 }
-
+#endif
 
 
 void ScintillaGTK::GetSelection(GtkSelectionData *selection_data, guint info, SelectionText *text) {
@@ -1627,10 +1861,15 @@ void ScintillaGTK::StoreOnClipboard(SelectionText *clipText) {
 	if (clipBoard == NULL) // Occurs if widget isn't in a toplevel
 		return;
 
-	if (gtk_clipboard_set_with_data(clipBoard, clipboardCopyTargets, nClipboardCopyTargets,
-				    ClipboardGetSelection, ClipboardClearSelection, clipText)) {
-		gtk_clipboard_set_can_store(clipBoard, clipboardCopyTargets, nClipboardCopyTargets);
-	}
+	// "gtk_clipboard_set_with_data" is not used by Komodo as it is causing
+	// a crash upon shutdown, see bug 81293. The "gtk_clipboard_set_text"
+	// can result in more memory getting used (in the case where a copy is
+	// never pasted).
+	gtk_clipboard_set_text(clipBoard, clipText->Data(), clipText->Length());
+	//if (gtk_clipboard_set_with_data(clipBoard, clipboardCopyTargets, nClipboardCopyTargets,
+	//			    ClipboardGetSelection, ClipboardClearSelection, clipText)) {
+	//	gtk_clipboard_set_can_store(clipBoard, clipboardCopyTargets, nClipboardCopyTargets);
+	//}
 }
 
 void ScintillaGTK::ClipboardGetSelection(GtkClipboard *, GtkSelectionData *selection_data, guint info, void *data) {
@@ -1643,6 +1882,10 @@ void ScintillaGTK::ClipboardClearSelection(GtkClipboard *, void *data) {
 }
 
 void ScintillaGTK::UnclaimSelection(GdkEventSelection *selection_event) {
+	if (rejectSelectionClaim) {
+		// Don't claim minimap selection (bug 97956)
+		return;
+	}
 	try {
 		//Platform::DebugPrintf("UnclaimSelection\n");
 		if (selection_event->selection == GDK_SELECTION_PRIMARY) {
@@ -1661,7 +1904,9 @@ void ScintillaGTK::UnclaimSelection(GdkEventSelection *selection_event) {
 void ScintillaGTK::Resize(int width, int height) {
 	//Platform::DebugPrintf("Resize %d %d\n", width, height);
 	//printf("Resize %d %d\n", width, height);
-
+	// XXX ActiveState prevent recursive Resize
+	if (inResize) return;
+	inResize = true;
 	// Not always needed, but some themes can have different sizes of scrollbars
 #if GTK_CHECK_VERSION(3,0,0)
 	GtkRequisition requisition;
@@ -1676,7 +1921,7 @@ void ScintillaGTK::Resize(int width, int height) {
 
 	// These allocations should never produce negative sizes as they would wrap around to huge
 	// unsigned numbers inside GTK+ causing warnings.
-	bool showSBHorizontal = horizontalScrollBarVisible && (wrapState == eWrapNone);
+	bool showSBHorizontal = horizontalScrollBarVisible && (wrapState == eWrapNone) && !useCustomScrollBars;
 
 	GtkAllocation alloc;
 	if (showSBHorizontal) {
@@ -1691,7 +1936,7 @@ void ScintillaGTK::Resize(int width, int height) {
 		horizontalScrollBarHeight = 0; // in case horizontalScrollBarVisible is true.
 	}
 
-	if (verticalScrollBarVisible) {
+	if (verticalScrollBarVisible && !useCustomScrollBars) {
 		gtk_widget_show(GTK_WIDGET(PWidget(scrollbarv)));
 		alloc.x = width - verticalScrollBarWidth;
 		alloc.y = 0;
@@ -1711,6 +1956,9 @@ void ScintillaGTK::Resize(int width, int height) {
 	alloc.width = Platform::Maximum(1, width - verticalScrollBarWidth);
 	alloc.height = Platform::Maximum(1, height - horizontalScrollBarHeight);
 	gtk_widget_size_allocate(GTK_WIDGET(PWidget(wText)), &alloc);
+	
+	// XXX ActiveState prevent recursive Resize
+	inResize = false;
 }
 
 static void SetAdjustmentValue(GtkAdjustment *object, int value) {
@@ -1770,7 +2018,8 @@ gint ScintillaGTK::PressThis(GdkEventButton *event) {
 
 		bool ctrl = (event->state & GDK_CONTROL_MASK) != 0;
 
-		gtk_widget_grab_focus(PWidget(wMain));
+		GrabFocus(); // KOMODO HACK instead of:
+		// gtk_widget_grab_focus(PWidget(wMain));
 		if (event->button == 1) {
 			// On X, instead of sending literal modifiers use the user specified
 			// modifier, defaulting to control instead of alt.
@@ -1779,7 +2028,7 @@ gint ScintillaGTK::PressThis(GdkEventButton *event) {
 			        (event->state & GDK_SHIFT_MASK) != 0,
 			        (event->state & GDK_CONTROL_MASK) != 0,
 			        (event->state & modifierTranslated(rectangularSelectionModifier)) != 0);
-		} else if (event->button == 2) {
+		} else if (event->button == 2 && !rejectSelectionClaim) {
 			// Grab the primary selection if it exists
 			SelectionPosition pos = SPositionFromLocation(pt, false, false, UserVirtualSpace());
 			if (OwnPrimarySelection() && primary.Empty())
@@ -1819,7 +2068,7 @@ gint ScintillaGTK::PressThis(GdkEventButton *event) {
 	} catch (...) {
 		errorStatus = SC_STATUS_FAILURE;
 	}
-	return TRUE;
+	return FALSE; /* ACTIVESTATE, must return false to let events fall through to mozilla */
 }
 
 gint ScintillaGTK::Press(GtkWidget *widget, GdkEventButton *event) {
@@ -1920,7 +2169,8 @@ gint ScintillaGTK::ScrollEvent(GtkWidget *widget, GdkEventScroll *event) {
 			sciThis->HorizontalScrollTo(sciThis->xOffset + cLineScroll);
 
 			// Text font size zoom
-		} else if (event->state & GDK_CONTROL_MASK) {
+		} else if ((event->state & GDK_CONTROL_MASK)
+                           && !sciThis->suppressZoomOnScrollWheel) {
 			if (cLineScroll < 0) {
 				sciThis->KeyCommand(SCI_ZOOMIN);
 			} else {
@@ -2119,6 +2369,10 @@ gboolean ScintillaGTK::KeyThis(GdkEventKey *event) {
 		if (gtk_im_context_filter_keypress(im_context, event)) {
 			return 1;
 		}
+
+		/* KOMODO: Ignore all keypress events - bug 96299 */
+		return false;
+
 		if (!event->keyval) {
 			return true;
 		}
@@ -2548,6 +2802,7 @@ gint ScintillaGTK::SelectionClear(GtkWidget *widget, GdkEventSelection *selectio
 	return TRUE;
 }
 
+#ifndef KOMODO_DISABLE_DRAG_DROP
 gboolean ScintillaGTK::DragMotionThis(GdkDragContext *context,
                                  gint x, gint y, guint dragtime) {
 	try {
@@ -2659,9 +2914,11 @@ void ScintillaGTK::DragDataGet(GtkWidget *widget, GdkDragContext *context,
 		sciThis->errorStatus = SC_STATUS_FAILURE;
 	}
 }
+#endif
 
 int ScintillaGTK::TimeOut(ScintillaGTK *sciThis) {
 	sciThis->Tick();
+	sciThis->DragScroll();
 	return 1;
 }
 
@@ -2857,13 +3114,21 @@ void ScintillaGTK::ClassInit(OBJECT_CLASS* object_class, GtkWidgetClass *widget_
 	widget_class->selection_get = SelectionGet;
 	widget_class->selection_clear_event = SelectionClear;
 
+#ifdef KOMODO_DISABLE_DRAG_DROP
+	widget_class->drag_data_received = NULL;
+	widget_class->drag_motion = NULL;
+	widget_class->drag_leave = NULL;
+	widget_class->drag_end = NULL;
+	widget_class->drag_drop = NULL;
+	widget_class->drag_data_get = NULL;
+#else
 	widget_class->drag_data_received = DragDataReceived;
 	widget_class->drag_motion = DragMotion;
 	widget_class->drag_leave = DragLeave;
 	widget_class->drag_end = DragEnd;
 	widget_class->drag_drop = Drop;
 	widget_class->drag_data_get = DragDataGet;
-
+#endif
 	widget_class->realize = Realize;
 	widget_class->unrealize = UnRealize;
 	widget_class->map = Map;
@@ -2917,7 +3182,9 @@ static void scintilla_init(ScintillaObject *sci) {
 #if GTK_CHECK_VERSION(2,20,0)
 		gtk_widget_set_can_focus(GTK_WIDGET(sci), TRUE);
 #else
+#ifndef KOMODO_NO_FOCUS
 		GTK_WIDGET_SET_FLAGS(sci, GTK_CAN_FOCUS);
+#endif
 #endif
 		sci->pscin = new ScintillaGTK(sci);
 	} catch (...) {
