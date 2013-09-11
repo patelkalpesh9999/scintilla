@@ -11,35 +11,37 @@
 from FileGenerator import Regenerate, UpdateLineInFile, ReplaceREInFile
 import ScintillaData
 
+
 def UpdateVersionNumbers(sci, root):
     UpdateLineInFile(root + "win32/ScintRes.rc", "#define VERSION_SCINTILLA",
-        "#define VERSION_SCINTILLA \"" + sci.versionDotted + "\"")
+                     "#define VERSION_SCINTILLA \"" + sci.versionDotted + "\"")
     UpdateLineInFile(root + "win32/ScintRes.rc", "#define VERSION_WORDS",
-        "#define VERSION_WORDS " + sci.versionCommad)
+                     "#define VERSION_WORDS " + sci.versionCommad)
     UpdateLineInFile(root + "qt/ScintillaEditBase/ScintillaEditBase.pro",
-        "VERSION =",
-        "VERSION = " + sci.versionDotted)
+                     "VERSION =",
+                     "VERSION = " + sci.versionDotted)
     UpdateLineInFile(root + "qt/ScintillaEdit/ScintillaEdit.pro",
-        "VERSION =",
-        "VERSION = " + sci.versionDotted)
+                     "VERSION =",
+                     "VERSION = " + sci.versionDotted)
     UpdateLineInFile(root + "doc/ScintillaDownload.html", "       Release",
-        "       Release " + sci.versionDotted)
+                     "       Release " + sci.versionDotted)
     ReplaceREInFile(root + "doc/ScintillaDownload.html",
-        r"/scintilla/([a-zA-Z]+)\d\d\d",
-        r"/scintilla/\g<1>" +  sci.version)
+                    r"/scintilla/([a-zA-Z]+)\d\d\d",
+                    r"/scintilla/\g<1>" + sci.version)
     UpdateLineInFile(root + "doc/index.html",
-        '          <font color="#FFCC99" size="3"> Release version',
-        '          <font color="#FFCC99" size="3"> Release version ' +\
-        sci.versionDotted + '<br />')
+                     '          <font color="#FFCC99" size="3"> Release version',
+                     '          <font color="#FFCC99" size="3"> Release version ' +
+                     sci.versionDotted + '<br />')
     UpdateLineInFile(root + "doc/index.html",
-        '           Site last modified',
-        '           Site last modified ' + sci.mdyModified + '</font>')
+                     '           Site last modified',
+                     '           Site last modified ' + sci.mdyModified + '</font>')
     UpdateLineInFile(root + "doc/ScintillaHistory.html",
-        '	Released ',
-        '	Released ' + sci.dmyModified + '.')
+                     '	Released ',
+                     '	Released ' + sci.dmyModified + '.')
+
 
 def RegenerateAll(root):
-    
+
     sci = ScintillaData.ScintillaData(root)
 
     Regenerate(root + "src/Catalogue.cxx", "//", sci.lexerModules)
@@ -47,5 +49,5 @@ def RegenerateAll(root):
 
     UpdateVersionNumbers(sci, root)
 
-if __name__=="__main__":
+if __name__ == "__main__":
     RegenerateAll("../")

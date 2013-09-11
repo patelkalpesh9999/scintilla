@@ -7,14 +7,14 @@
 #     version
 #     versionDotted
 #     versionCommad
-#     
+#
 # Date last modified
 #     dateModified
 #     yearModified
 #     mdyModified
 #     dmyModified
 #     myModified
-#     
+#
 # Information about lexers and properties defined in lexers
 #     lexFiles
 #         sorted list of lexer files
@@ -30,9 +30,13 @@
 
 from __future__ import with_statement
 
-import datetime, glob, os, textwrap
+import datetime
+import glob
+import os
+import textwrap
 
 import FileGenerator
+
 
 def FindModules(lexFile):
     modules = []
@@ -58,21 +62,23 @@ knownIrregularProperties = [
     "nsis.ignorecase"
 ]
 
+
 def FindProperties(lexFile):
     properties = {}
     with open(lexFile) as f:
         for l in f.readlines():
             if ("GetProperty" in l or "DefineProperty" in l) and "\"" in l:
                 l = l.strip()
-                if not l.startswith("//"):	# Drop comments
+                if not l.startswith("//"):  # Drop comments
                     propertyName = l.split("\"")[1]
                     if propertyName.lower() == propertyName:
                         # Only allow lower case property names
                         if propertyName in knownIrregularProperties or \
                             propertyName.startswith("fold.") or \
-                            propertyName.startswith("lexer."):
+                                propertyName.startswith("lexer."):
                             properties[propertyName] = 1
     return properties
+
 
 def FindPropertyDocumentation(lexFile):
     documents = {}
@@ -115,17 +121,21 @@ def FindPropertyDocumentation(lexFile):
             del documents[name]
     return documents
 
-def ciCompare(a,b):
+
+def ciCompare(a, b):
     return cmp(a.lower(), b.lower())
+
 
 def ciKey(a):
     return a.lower()
+
 
 def SortListInsensitive(l):
     try:    # Try key function
         l.sort(key=ciKey)
     except TypeError:    # Earlier version of Python, so use comparison function
         l.sort(ciCompare)
+
 
 class ScintillaData:
     def __init__(self, scintillaRoot):
@@ -142,14 +152,17 @@ class ScintillaData:
                 [0].split('\"')[3]
             # 20130602
             # index.html, SciTE.html
-            dtModified = datetime.datetime.strptime(self.dateModified, "%Y%m%d")
+            dtModified = datetime.datetime.strptime(
+                self.dateModified, "%Y%m%d")
             self.yearModified = self.dateModified[0:4]
             monthModified = dtModified.strftime("%B")
             dayModified = "%d" % dtModified.day
-            self.mdyModified = monthModified + " " + dayModified + " " + self.yearModified
+            self.mdyModified = monthModified + " " + \
+                dayModified + " " + self.yearModified
             # May 22 2013
             # index.html, SciTE.html
-            self.dmyModified = dayModified + " " + monthModified + " " + self.yearModified
+            self.dmyModified = dayModified + " " + \
+                monthModified + " " + self.yearModified
             # 22 May 2013
             # ScintillaHistory.html -- only first should change
             self.myModified = monthModified + " " + self.yearModified
@@ -173,21 +186,26 @@ class ScintillaData:
         self.lexerProperties = list(lexerProperties)
         SortListInsensitive(self.lexerProperties)
 
+
 def printWrapped(text):
     print(textwrap.fill(text, subsequent_indent="    "))
 
-if __name__=="__main__":
+if __name__ == "__main__":
     sci = ScintillaData("../")
-    print("Version   %s   %s   %s" % (sci.version, sci.versionDotted, sci.versionCommad))
+    print("Version   %s   %s   %s" %
+          (sci.version, sci.versionDotted, sci.versionCommad))
     print("Date last modified    %s   %s   %s   %s   %s" % (
         sci.dateModified, sci.yearModified, sci.mdyModified, sci.dmyModified, sci.myModified))
-    printWrapped(str(len(sci.lexFiles)) + " lexer files: " + ", ".join(sci.lexFiles))
-    printWrapped(str(len(sci.lexerModules)) + " lexer modules: " + ", ".join(sci.lexerModules))
+    printWrapped(str(len(
+        sci.lexFiles)) + " lexer files: " + ", ".join(sci.lexFiles))
+    printWrapped(str(len(sci.lexerModules)) +
+                 " lexer modules: " + ", ".join(sci.lexerModules))
     printWrapped("Lexer properties: " + ", ".join(sci.lexerProperties))
     print("Lexer property documentation:")
     documentProperties = list(sci.propertyDocuments.keys())
     SortListInsensitive(documentProperties)
     for k in documentProperties:
         print("    " + k)
-        print(textwrap.fill(sci.propertyDocuments[k], initial_indent="        ",
-            subsequent_indent="        "))
+        print(
+            textwrap.fill(sci.propertyDocuments[k], initial_indent="        ",
+                          subsequent_indent="        "))

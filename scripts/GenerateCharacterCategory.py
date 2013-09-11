@@ -2,16 +2,22 @@
 # Should be run rarely when a Python with a new version of Unicode data is available.
 # Should not be run with old versions of Python.
 
-import codecs, os, platform, sys, unicodedata
+import codecs
+import os
+import platform
+import sys
+import unicodedata
 
 from FileGenerator import Regenerate
+
 
 def findCategories(filename):
     with codecs.open(filename, "r", "UTF-8") as infile:
         lines = [x.strip() for x in infile.readlines() if "\tcc" in x]
-    values = "".join(lines).replace(" ","").split(",")
+    values = "".join(lines).replace(" ", "").split(",")
     print(values)
     return [v[2:] for v in values]
+
 
 def updateCharacterCategory(filename):
     values = ["// Created with Python %s,  Unicode %s" % (

@@ -1,6 +1,9 @@
 # -*- coding: utf-8 -*-
 
-import ctypes, os, sys, unittest
+import ctypes
+import os
+import sys
+import unittest
 
 from PySide.QtCore import *
 from PySide.QtGui import *
@@ -15,49 +18,54 @@ scintillaIncludeDirectory = os.path.join(scintillaDirectory, "include")
 sys.path.append(scintillaIncludeDirectory)
 import Face
 
+
 class Form(QDialog):
 
-	def __init__(self, parent=None):
-		super(Form, self).__init__(parent)
-		self.resize(460,300)
-		# Create widget
-		self.edit = ScintillaEditPy.ScintillaEdit(self)
+    def __init__(self, parent=None):
+        super(Form, self).__init__(parent)
+        self.resize(460, 300)
+        # Create widget
+        self.edit = ScintillaEditPy.ScintillaEdit(self)
+
 
 class XiteWin():
-	def __init__(self, test=""):
-		self.face = Face.Face()
-		self.face.ReadFromFile(os.path.join(scintillaIncludeDirectory, "Scintilla.iface"))
+    def __init__(self, test=""):
+        self.face = Face.Face()
+        self.face.ReadFromFile(os.path.join(
+            scintillaIncludeDirectory, "Scintilla.iface"))
 
-		self.test = test
+        self.test = test
 
-		self.form = Form()
+        self.form = Form()
 
-		scifn = self.form.edit.send(int(self.face.features["GetDirectFunction"]["Value"]), 0, 0)
-		sciptr = ctypes.c_char_p(self.form.edit.send(
-			int(self.face.features["GetDirectPointer"]["Value"]), 0,0))
+        scifn = self.form.edit.send(int(self.face.features[
+                                    "GetDirectFunction"]["Value"]), 0, 0)
+        sciptr = ctypes.c_char_p(self.form.edit.send(
+            int(self.face.features["GetDirectPointer"]["Value"]), 0, 0))
 
-		self.ed = ScintillaCallable.ScintillaCallable(self.face, scifn, sciptr)
-		self.form.show()
-		
-	def DoStuff(self):
-		print(self.test)
-		self.CmdTest()
+        self.ed = ScintillaCallable.ScintillaCallable(self.face, scifn, sciptr)
+        self.form.show()
 
-	def DoEvents(self):
-		QApplication.processEvents()
+    def DoStuff(self):
+        print(self.test)
+        self.CmdTest()
 
-	def CmdTest(self):
-		runner = unittest.TextTestRunner()
-		tests = unittest.defaultTestLoader.loadTestsFromName(self.test)
-		results = runner.run(tests)
-		print(results)
-		sys.exit(0)
+    def DoEvents(self):
+        QApplication.processEvents()
+
+    def CmdTest(self):
+        runner = unittest.TextTestRunner()
+        tests = unittest.defaultTestLoader.loadTestsFromName(self.test)
+        results = runner.run(tests)
+        print(results)
+        sys.exit(0)
 
 xiteFrame = None
 
+
 def main(test):
-	global xiteFrame
-	app = QApplication(sys.argv)
-	xiteFrame = XiteWin(test)
-	xiteFrame.DoStuff()
-	sys.exit(app.exec_())
+    global xiteFrame
+    app = QApplication(sys.argv)
+    xiteFrame = XiteWin(test)
+    xiteFrame.DoStuff()
+    sys.exit(app.exec_())

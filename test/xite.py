@@ -3,4 +3,4 @@
 import XiteWin
 
 if __name__ == "__main__":
-	XiteWin.main("")
+    XiteWin.main("")
